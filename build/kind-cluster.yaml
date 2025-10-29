@@ -1,0 +1,23 @@
+---
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+networking:
+  ipFamily: dual
+  # if you want to expose the kind cluster externally
+  # change the API server address from loopback to the desired IP
+  # via KIND_API_SERVER_ADDRESS make variable
+  apiServerAddress: "127.0.0.1"
+nodes:
+  - role: control-plane
+    # reserve 32767 node port to expose Apps interface over this port
+    # the hostPort is overwritten at runtime based on the selected EXT_HTTPS_PORT variable
+    extraPortMappings:
+      - containerPort: 32767
+        hostPort: 5443
+        listenAddress: "0.0.0.0"
+    # allow longer port-forwarding connection
+    # see https://stackoverflow.com/a/48829363
+    kubeadmConfigPatches:
+      - |
+        kind: KubeletConfiguration
+        streamingConnectionIdleTimeout: "96h0m0s"
