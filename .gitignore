@@ -1,0 +1,18 @@
+.cache
+
+# in case we run install guide from the docs repo
+kpt
+
+# ignoring private dir
+private
+
+# ignore build dir
+site
+tmp
+tools/
+build/
+*.log
+catalog/
+eda-kpt/
+.env
+.envrc
