@@ -13,6 +13,6 @@ tools/
 build/
 *.log
 catalog/
-eda-kpt/
+nok-kpt/
 .env
 .envrc

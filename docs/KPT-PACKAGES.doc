@@ -1,0 +1,35 @@
+### kpt commands
+kpt pkg init --description "bng observability and automation apps for nok"
+```
+
+```yaml
+# Kptfile with setters functions
+apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: nok-bng
+observability and automation   annotations:
+    config.kubernetes.io/local-config: "true"
+  namespace: nok-base
+info:
+  description: bng observability and automation apps for nok
+pipeline:
+  mutators:
+    - image: gcr.io/kpt-fn/set-namespace:v0.4.1
+      configMap:
+        namespace: nok-base
+```
+
+```bash
+kpt live init .
+kpt fn render .
+kpt pkg tree .
+kpt live apply .  --reconcile-timeout=5m # add --inventory-policy=adopt if needs to force serviceaccount policies
+kpt live destroy .
+```
+
+### Upload images to kind
+
+```
+kind load docker-image registry.srlinux.dev/pub/nokia_srsim:25.10.R1 --name nok-demo
+```
