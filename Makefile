@@ -37,9 +37,10 @@ K9S ?= $(TOOLS)/k9s
 GH ?= $(TOOLS)/gh
 CLAB ?= $(TOOLS)/clab # Added containerlab alias
 
-KPT_PKG ?= $(BASE)/eda-kpt
-
 # --- Git Repository Configuration ---
+SRLINUX_IMAGE ?= registry.srlinux.dev/pub/nokia_srsim:25.10.R1
+SRSIM_LICENSE_FILE ?= $(NOK_CLABS_DIR)/nok-bng/srsim-lic-25.txt
+
 NOK_KPT_DIR ?= $(BASE)/nok-kpt
 KPT_REPO_URL ?= https://github.com/CSPDevLabs/kpt
 
@@ -112,8 +113,11 @@ define INSTALL_KPT_PACKAGE
 	}
 endef
 
-.PHONY: all
-all: check-tools cluster-up git-clone-kpt 
+.PHONY: try-nok
+try-nok: check-tools cluster-up git-clone-kpt git-clone-clab install-base-pkg install-lb-pkg start-ingress-port-forward
+
+.PHONY: deploy-bng
+deploy-bng: try-nok install-bng-pkg  destroy-clab-bng deploy-clab-bng
 
 .PHONY: cluster-up
 cluster-up: $(KIND_CONFIG_REAL_LOC) ## Bring up the KinD cluster
@@ -235,8 +239,28 @@ git-clone-clab: ## Clones the CSPDevLabs/nok-clabs repository into ./nok-clabs
 		echo "--> GIT: $(NOK_CLABS_DIR) already exists. Skipping clone." ;\
 	fi
 
+.PHONY: check-clab-prerequisites
+check-clab-prerequisites: ## Checks for required Docker image and SROS license file for Containerlab BNG
+	@echo "--> CLAB: Checking prerequisites for BNG deployment..."
+	@{ \
+		if [ -z "$$(docker images -q $(SRLINUX_IMAGE) 2> /dev/null)" ]; then \
+			echo "Error: Required Docker image '$(SRLINUX_IMAGE)' not found locally." ;\
+			echo "Please pull the image using: docker pull $(SRLINUX_IMAGE)" ;\
+			exit 1 ;\
+		fi ;\
+		echo "--> CLAB: Docker image '$(SRLINUX_IMAGE)' found." ;\
+		if [ ! -f "$(SRSIM_LICENSE_FILE)" ]; then \
+			echo "Error: Nokia SROS license file '$(SRSIM_LICENSE_FILE)' not found." ;\
+			echo "Please ensure the license file is placed at this location." ;\
+			exit 1 ;\
+		fi ;\
+		echo "--> CLAB: Nokia SROS license file found." ;\
+	}
+
+
+
 .PHONY: deploy-clab-bng
-deploy-clab-bng: check-tools git-clone-clab ## Deploys the Containerlab BNG topology
+deploy-clab-bng: check-tools git-clone-clab check-clab-prerequisites ## Deploys the Containerlab BNG topology
 	@echo "--> CLAB: Deploying BNG topology from $(NOK_CLABS_DIR)/nok-bng"
 	@if [ -d "$(NOK_CLABS_DIR)/nok-bng" ]; then \
 		cd $(NOK_CLABS_DIR)/nok-bng && $(CLAB) deploy -t topo.yaml ;\
@@ -244,6 +268,8 @@ deploy-clab-bng: check-tools git-clone-clab ## Deploys the Containerlab BNG topo
 		echo "Error: $(NOK_CLABS_DIR)/nok-bng directory not found. Please ensure the nok-clabs repository is cloned and contains the nok-bng subdirectory." ;\
 		exit 1 ;\
 	fi
+
+
 .PHONY: destroy-clab-bng
 destroy-clab-bng: check-tools git-clone-clab ## Destroys the Containerlab BNG topology and cleans up
 	@echo "--> CLAB: Destroying BNG topology from $(NOK_CLABS_DIR)/nok-bng"
@@ -299,7 +325,37 @@ $(KIND_CONFIG_REAL_LOC):
 	@echo "  podSubnet: \"10.244.0.0/16\"" >> $(KIND_CONFIG_REAL_LOC)
 	@echo "  serviceSubnet: \"10.96.0.0/12\"" >> $(KIND_CONFIG_REAL_LOC)
 
+
+
+
 # --- KPT Package Installation ---
+
+.PHONY: start-ingress-port-forward
+start-ingress-port-forward: ## Starts background port-forward for ingress-nginx-controller
+	@echo "--> K8S: Waiting for ingress-nginx-controller pod in namespace 'nok-base' to be ready..."
+	$(KUBECTL) wait --namespace=nok-base --for=condition=ready pod -l app.kubernetes.io/component=controller --timeout=5m
+	@echo "--> K8S: Starting ingress-nginx-controller port-forward (0.0.0.0:8080 -> 80)..."
+	nohup $(KUBECTL) port-forward --namespace=nok-base service/ingress-nginx-controller --address 0.0.0.0 8080:80 > /dev/null 2>&1 &
+	@echo "--> K8S: Ingress port-forward started in background."
+	@echo "    To stop it, find the process using 'ps aux | grep \"kubectl port-forward\"' and 'kill <PID>'."
+
 .PHONY: install-base-pkg
 install-base-pkg: check-tools git-clone-kpt ## Installs the base kpt package from ./nok-kpt/nok-base
 	@$(call INSTALL_KPT_PACKAGE,$(NOK_KPT_DIR)/nok-base,nok-base,"--reconcile-timeout=5m", "--inventory-policy=adopt")	
+
+.PHONY: wait-for-metallb-ready
+wait-for-metallb-ready: ## Wait for the Kubernetes Metallb node to be ready
+	@echo "--> KIND: Waiting for Metallb Controller to be ready"
+	@{ \
+		START=$$(date +%s) ; \
+		$(KUBECTL) wait --for=condition=available deployment/controller -n metallb-system --timeout=5m --timeout=5m ; \
+		echo "--> KIND: Node ready check took $$(( $$(date +%s) - $$START ))s" ; \
+	}
+
+.PHONY: install-lb-pkg
+install-lb-pkg: check-tools git-clone-kpt install-base-pkg wait-for-metallb-ready ## Installs the base kpt package from ./nok-kpt/nok-lb
+	@$(call INSTALL_KPT_PACKAGE,$(NOK_KPT_DIR)/nok-lb,nok-lb,"--reconcile-timeout=5m", "")		
+
+.PHONY: install-bng-pkg
+install-bng-pkg: check-tools git-clone-kpt install-base-pkg install-lb-pkg ## Installs the base kpt package from ./nok-kpt/nok-bng
+	@$(call INSTALL_KPT_PACKAGE,$(NOK_KPT_DIR)/nok-bng,nok-bng,"--reconcile-timeout=5m", "--inventory-policy=adopt")		
