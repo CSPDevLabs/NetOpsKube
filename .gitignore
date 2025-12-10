@@ -14,5 +14,6 @@ build/
 *.log
 catalog/
 nok-kpt/
+nok-clabs/
 .env
 .envrc

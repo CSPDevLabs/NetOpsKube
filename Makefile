@@ -35,8 +35,17 @@ HELM ?= $(TOOLS)/helm
 KPT ?= $(TOOLS)/kpt
 K9S ?= $(TOOLS)/k9s
 GH ?= $(TOOLS)/gh
+CLAB ?= $(TOOLS)/clab # Added containerlab alias
 
-KPT_PKG ?= $(BASE)/eda-kpt
+# --- Git Repository Configuration ---
+SRLINUX_IMAGE ?= registry.srlinux.dev/pub/nokia_srsim:25.10.R1
+SRSIM_LICENSE_FILE ?= $(NOK_CLABS_DIR)/nok-bng/srsim-lic-25.txt
+
+NOK_KPT_DIR ?= $(BASE)/nok-kpt
+KPT_REPO_URL ?= https://github.com/CSPDevLabs/kpt
+
+NOK_CLABS_DIR ?= $(BASE)/nok-clabs
+CLABS_REPO_URL ?= https://github.com/CSPDevLabs/nok-clabs
 
 # Internal helper for output indentation
 INDENT_OUT ?= sed 's/^/    /'
@@ -52,6 +61,7 @@ KPT_VERSION ?= v1.0.0-beta.57
 KUBECTL_VERSION ?= v1.33.1
 K9S_VERSION ?= v0.32.4
 YQ_VERSION ?= v4.42.1
+CLAB_VERSION ?= 0.72.0
 
 ### Tool Locations
 ### ---------------------------------------------------------------------------|
@@ -61,6 +71,7 @@ HELM_SRC ?= https://get.helm.sh/helm-$(HELM_VERSION)-$(OS)-$(ARCH).tar.gz
 KPT_SRC ?= https://github.com/GoogleContainerTools/kpt/releases/download/$(KPT_VERSION)/kpt_$(OS)_$(ARCH)
 K9S_SRC ?= https://github.com/derailed/k9s/releases/download/$(K9S_VERSION)/k9s_$(UNAME)_$(ARCH).tar.gz
 YQ_SRC ?= https://github.com/mikefarah/yq/releases/download/$(YQ_VERSION)/yq_$(OS)_$(ARCH)
+CLAB_SRC ?= https://github.com/srl-labs/containerlab/releases/download/v$(CLAB_VERSION)/containerlab_$(CLAB_VERSION)_$(OS)_$(ARCH).tar.gz
 
 # GH_SRC needs special handling for OS/ARCH mapping
 ifeq ($(OS),darwin)
@@ -72,7 +83,7 @@ else
 endif
 GH_SRC ?= https://github.com/cli/cli/releases/download/v$(GH_VERSION)/gh_$(GH_VERSION)_$(GH_OS_ARCH).$(GH_EXT)
 
-DOWNLOAD_TOOLS_LIST := $(KIND) $(KUBECTL) $(HELM) $(KPT) $(K9S) $(YQ) $(GH)
+DOWNLOAD_TOOLS_LIST := $(KIND) $(KUBECTL) $(HELM) $(KPT) $(K9S) $(YQ) $(GH) $(CLAB) # Added CLAB
 
 # --- Macros for tool downloading ---
 define download-bin
@@ -82,18 +93,34 @@ endef
 
 define download-bin-from-archive
 	$(info --> INFO: Downloading $(2))
-	if test ! -f $(1); then $(CURL) -L --output - $(2) | tar -x$(5) $(if $(6),--strip-components=$(6)) -C $(3) >/dev/null && chmod a+x $(1); fi
+	if test ! -f $(1); then $(CURL) -L --output - $(2) | tar -x$(5) $(if $(6),--strip-components $(6)) -C $(3) $(4) >/dev/null && chmod a+x $(1); fi
 endef
 
-# --- Phony Targets ---
+KPT_LIVE_INIT_FORCE ?= 0 # Set to 1 to force re-initialization of kpt packages
+
+define INSTALL_KPT_PACKAGE
+	{	\
+		echo -e "--> INSTALL: [\033[1;34m$2\033[0m] - Applying kpt package"									;\
+		pushd $1 &>/dev/null || (echo "[ERROR]: Failed to switch cwd to $2" && exit 1)						;\
+		if [[ ! -f resourcegroup.yaml ]] || [[ $(KPT_LIVE_INIT_FORCE) -eq 1 ]]; then						 \
+			$(KPT) live init --force 2>&1 | $(INDENT_OUT)													;\
+		else																								 \
+			echo -e "--> INSTALL: [\033[1;34m$2\033[0m] - Resource group found, don't re-init this package"	;\
+		fi																									;\
+		$(KPT) live apply $3 $4 2>&1 | $(INDENT_OUT)                                                   		;\
+		popd &>/dev/null || (echo "[ERROR]: Failed to switch back from $2" && exit 1)						;\
+		echo -e "--> INSTALL: [\033[0;32m$2\033[0m] - Applied and reconciled package"						;\
+	}
+endef
+
 .PHONY: try-nok
-try-nok: check-tools kind ## Default target: Create and wait for the KinD cluster
+try-nok: check-tools cluster-up git-clone-kpt git-clone-clab install-base-pkg install-lb-pkg start-ingress-port-forward
 
-.PHONY: kind
-kind: check-tools cluster cluster-wait-for-node-ready ## Launch a single node KinD cluster (K8S inside Docker)
+.PHONY: deploy-bng
+deploy-bng: try-nok install-bng-pkg  destroy-clab-bng deploy-clab-bng
 
-.PHONY: cluster
-cluster: $(KIND_CONFIG_REAL_LOC) ## Create the KinD cluster if it doesn't exist
+.PHONY: cluster-up
+cluster-up: $(KIND_CONFIG_REAL_LOC) ## Bring up the KinD cluster
 	@echo "--> KIND: Ensuring control-plane exists"
 	@{ \
 		cp $(KIND_CONFIG_REAL_LOC) $(KIND_LAUNCH_CONFIG) ;\
@@ -127,7 +154,7 @@ cluster-wait-for-node-ready: ## Wait for the Kubernetes control plane node to be
 	@echo "--> KIND: Waiting for k8s node to be ready"
 	@{ \
 		START=$$(date +%s) ;\
-		$(KUBECTL) wait --for=condition=Ready node/$(KIND_CLUSTER_NAME)-control-plane --timeout=300s >/dev/null ;\
+		$(KUBECTL) wait --for=condition=Ready node/$(KIND_CLUSTER_NAME)-control-plane --timeout=300s 2>&1 | $(INDENT_OUT) ;\
 		echo "--> KIND: Node ready check took $$(( $$(date +%s) - $$START ))s" ;\
 	}
 
@@ -138,7 +165,7 @@ delete-cluster: ## Delete the KinD cluster
 	@rm -f $(KIND_LAUNCH_CONFIG)
 
 .PHONY: check-tools
-check-tools: $(KIND) $(KUBECTL) $(YQ) $(HELM) $(KPT) $(K9S) $(GH) create-tool-aliases ## Ensure all required tools are present and aliased
+check-tools: $(KIND) $(KUBECTL) $(YQ) $(HELM) $(KPT) $(K9S) $(GH) $(CLAB) create-tool-aliases ## Ensure all required tools are present and aliased
 	@echo "--> All required tools found or downloaded."
 
 .PHONY: create-tool-aliases
@@ -182,6 +209,76 @@ $(YQ): | $(BASE) $(TOOLS) ; $(info --> TOOLS: Ensuring yq is present in $(YQ))
 
 $(GH): | $(BASE) $(TOOLS) ; $(info --> TOOLS: Ensuring gh is present in $(GH))
 	@$(call download-bin-from-archive,$(GH),$(GH_SRC),$(TOOLS),gh_$(GH_VERSION)_$(GH_OS_ARCH)/bin/gh,z,2)
+
+$(CLAB): | $(BASE) $(TOOLS) ; $(info --> TOOLS: Ensuring containerlab is present in $(CLAB))
+	@if test ! -f $(CLAB); then \
+		echo "    Downloading $(CLAB_SRC)..." ;\
+		TEMP_DIR=$$(mktemp -d) ;\
+		$(CURL) -L --output - $(CLAB_SRC) | tar -xz -C $$TEMP_DIR >/dev/null ;\
+		mv $$TEMP_DIR/containerlab $(CLAB) ;\
+		chmod a+x $(CLAB) ;\
+		rm -rf $$TEMP_DIR ;\
+	fi
+
+# --- Git Clone Targets ---
+.PHONY: git-clone-kpt
+git-clone-kpt: ## Clones the CSPDevLabs/kpt repository into ./nok-kpt
+	@echo "--> GIT: Cloning $(KPT_REPO_URL) into $(NOK_KPT_DIR)"
+	@if [ ! -d "$(NOK_KPT_DIR)" ]; then \
+		git clone $(KPT_REPO_URL) $(NOK_KPT_DIR) ;\
+	else \
+		echo "--> GIT: $(NOK_KPT_DIR) already exists. Skipping clone." ;\
+	fi
+
+.PHONY: git-clone-clab
+git-clone-clab: ## Clones the CSPDevLabs/nok-clabs repository into ./nok-clabs
+	@echo "--> GIT: Cloning $(CLABS_REPO_URL) into $(NOK_CLABS_DIR)"
+	@if [ ! -d "$(NOK_CLABS_DIR)" ]; then \
+		git clone $(CLABS_REPO_URL) $(NOK_CLABS_DIR) ;\
+	else \
+		echo "--> GIT: $(NOK_CLABS_DIR) already exists. Skipping clone." ;\
+	fi
+
+.PHONY: check-clab-prerequisites
+check-clab-prerequisites: ## Checks for required Docker image and SROS license file for Containerlab BNG
+	@echo "--> CLAB: Checking prerequisites for BNG deployment..."
+	@{ \
+		if [ -z "$$(docker images -q $(SRLINUX_IMAGE) 2> /dev/null)" ]; then \
+			echo "Error: Required Docker image '$(SRLINUX_IMAGE)' not found locally." ;\
+			echo "Please pull the image using: docker pull $(SRLINUX_IMAGE)" ;\
+			exit 1 ;\
+		fi ;\
+		echo "--> CLAB: Docker image '$(SRLINUX_IMAGE)' found." ;\
+		if [ ! -f "$(SRSIM_LICENSE_FILE)" ]; then \
+			echo "Error: Nokia SROS license file '$(SRSIM_LICENSE_FILE)' not found." ;\
+			echo "Please ensure the license file is placed at this location." ;\
+			exit 1 ;\
+		fi ;\
+		echo "--> CLAB: Nokia SROS license file found." ;\
+	}
+
+
+
+.PHONY: deploy-clab-bng
+deploy-clab-bng: check-tools git-clone-clab check-clab-prerequisites ## Deploys the Containerlab BNG topology
+	@echo "--> CLAB: Deploying BNG topology from $(NOK_CLABS_DIR)/nok-bng"
+	@if [ -d "$(NOK_CLABS_DIR)/nok-bng" ]; then \
+		cd $(NOK_CLABS_DIR)/nok-bng && $(CLAB) deploy -t topo.yaml ;\
+	else \
+		echo "Error: $(NOK_CLABS_DIR)/nok-bng directory not found. Please ensure the nok-clabs repository is cloned and contains the nok-bng subdirectory." ;\
+		exit 1 ;\
+	fi
+
+
+.PHONY: destroy-clab-bng
+destroy-clab-bng: check-tools git-clone-clab ## Destroys the Containerlab BNG topology and cleans up
+	@echo "--> CLAB: Destroying BNG topology from $(NOK_CLABS_DIR)/nok-bng"
+	@if [ -d "$(NOK_CLABS_DIR)/nok-bng" ]; then \
+		cd $(NOK_CLABS_DIR)/nok-bng && $(CLAB) destroy --cleanup -t topo.yaml ;\
+	else \
+		echo "Error: $(NOK_CLABS_DIR)/nok-bng directory not found. Please ensure the nok-clabs repository is cloned and contains the nok-bng subdirectory." ;\
+		exit 1 ;\
+	fi	
 
 # --- Directory Creation Rules ---
 $(BASE):
@@ -227,3 +324,38 @@ $(KIND_CONFIG_REAL_LOC):
 	@echo "  apiServerPort: 6443" >> $(KIND_CONFIG_REAL_LOC)
 	@echo "  podSubnet: \"10.244.0.0/16\"" >> $(KIND_CONFIG_REAL_LOC)
 	@echo "  serviceSubnet: \"10.96.0.0/12\"" >> $(KIND_CONFIG_REAL_LOC)
+
+
+
+
+# --- KPT Package Installation ---
+
+.PHONY: start-ingress-port-forward
+start-ingress-port-forward: ## Starts background port-forward for ingress-nginx-controller
+	@echo "--> K8S: Waiting for ingress-nginx-controller pod in namespace 'nok-base' to be ready..."
+	$(KUBECTL) wait --namespace=nok-base --for=condition=ready pod -l app.kubernetes.io/component=controller --timeout=5m
+	@echo "--> K8S: Starting ingress-nginx-controller port-forward (0.0.0.0:8080 -> 80)..."
+	nohup $(KUBECTL) port-forward --namespace=nok-base service/ingress-nginx-controller --address 0.0.0.0 8080:80 > /dev/null 2>&1 &
+	@echo "--> K8S: Ingress port-forward started in background."
+	@echo "    To stop it, find the process using 'ps aux | grep \"kubectl port-forward\"' and 'kill <PID>'."
+
+.PHONY: install-base-pkg
+install-base-pkg: check-tools git-clone-kpt ## Installs the base kpt package from ./nok-kpt/nok-base
+	@$(call INSTALL_KPT_PACKAGE,$(NOK_KPT_DIR)/nok-base,nok-base,"--reconcile-timeout=5m", "--inventory-policy=adopt")	
+
+.PHONY: wait-for-metallb-ready
+wait-for-metallb-ready: ## Wait for the Kubernetes Metallb node to be ready
+	@echo "--> KIND: Waiting for Metallb Controller to be ready"
+	@{ \
+		START=$$(date +%s) ; \
+		$(KUBECTL) wait --for=condition=available deployment/controller -n metallb-system --timeout=5m --timeout=5m ; \
+		echo "--> KIND: Node ready check took $$(( $$(date +%s) - $$START ))s" ; \
+	}
+
+.PHONY: install-lb-pkg
+install-lb-pkg: check-tools git-clone-kpt install-base-pkg wait-for-metallb-ready ## Installs the base kpt package from ./nok-kpt/nok-lb
+	@$(call INSTALL_KPT_PACKAGE,$(NOK_KPT_DIR)/nok-lb,nok-lb,"--reconcile-timeout=5m", "")		
+
+.PHONY: install-bng-pkg
+install-bng-pkg: check-tools git-clone-kpt install-base-pkg install-lb-pkg ## Installs the base kpt package from ./nok-kpt/nok-bng
+	@$(call INSTALL_KPT_PACKAGE,$(NOK_KPT_DIR)/nok-bng,nok-bng,"--reconcile-timeout=5m", "--inventory-policy=adopt")		
