@@ -1,1 +1,1 @@
-Creating controller to sync sdcio targets to consul.
+Creating controller to sync sdcio targets to consul
