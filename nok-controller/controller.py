@@ -20,6 +20,8 @@ ADDITIONAL_TARGET_CRD_PLURAL = "additionaltargets" # Plural name for your Additi
 CONSUL_HTTP_ADDR = os.getenv("CONSUL_HTTP_ADDR", "http://consul-svc-nok-base.nok-base.svc.cluster.local:8500")
 CONSUL_HTTP_TOKEN = os.getenv("CONSUL_HTTP_TOKEN")
 CONSUL_SERVICE_PORT = int(os.getenv("CONSUL_SERVICE_PORT", "57400"))
+ADDITIONAL_TARGET_SERVICE_NAME = 'additional-target'
+TARGET_SERVICE_NAME = 'network-element'
 
 # Logging setup
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -119,7 +121,7 @@ class TargetConsulSyncController:
 
         logger.debug(f"Processing event: {event_type} for Target {target_namespace}/{target_name}")
 
-        service_id = f"target-{target_name}-{target_namespace}"
+        service_id = f"{TARGET_SERVICE_NAME}"
         service_name = target_name # Using target name as Consul service name
 
         if not target_address:
@@ -159,7 +161,7 @@ class TargetConsulSyncController:
         consul_id_base = additional_target_obj['spec'].get('id', at_name)
         consul_name_base = additional_target_obj['spec'].get('name', at_name)
 
-        service_id = f"additionaltarget-{consul_id_base}-{at_namespace}"
+        service_id = f"{ADDITIONAL_TARGET_SERVICE_NAME}"
         service_name = consul_name_base # Using spec.name or metadata.name as Consul service name
 
         if not at_address:
