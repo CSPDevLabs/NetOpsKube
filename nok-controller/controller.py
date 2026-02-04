@@ -121,8 +121,8 @@ class TargetConsulSyncController:
 
         logger.debug(f"Processing event: {event_type} for Target {target_namespace}/{target_name}")
 
-        service_id = f"{TARGET_SERVICE_NAME}"
-        service_name = target_name # Using target name as Consul service name
+        service_id = target_name
+        service_name = TARGET_SERVICE_NAME
 
         if not target_address:
             logger.warning(f"Target {target_namespace}/{target_name} has no 'spec.address'. Skipping.")
@@ -159,10 +159,9 @@ class TargetConsulSyncController:
 
         # Use spec.Id or spec.Name for Consul service name/ID if available, otherwise metadata.name
         consul_id_base = additional_target_obj['spec'].get('id', at_name)
-        consul_name_base = additional_target_obj['spec'].get('name', at_name)
 
-        service_id = f"{ADDITIONAL_TARGET_SERVICE_NAME}"
-        service_name = consul_name_base # Using spec.name or metadata.name as Consul service name
+        service_id = consul_id_base
+        service_name = ADDITIONAL_TARGET_SERVICE_NAME # Using spec.name or metadata.name as Consul service name
 
         if not at_address:
             logger.warning(f"AdditionalTarget {at_namespace}/{at_name} has no 'spec.address'. Skipping.")
