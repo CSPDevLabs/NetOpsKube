@@ -130,7 +130,7 @@ class TargetConsulSyncController:
 
         if event_type == 'ADDED' or event_type == 'MODIFIED':
             if self._is_target_ready(target_obj):
-                self._register_consul_service(service_name, service_id, target_address, CONSUL_SERVICE_PORT, tags)
+                self._register_consul_service(service_id, service_name, target_address, CONSUL_SERVICE_PORT, tags)
             else:
                 logger.info(f"Target {target_namespace}/{target_name} is not 'Ready'. Deregistering if exists or skipping registration.")
                 self._deregister_consul_service(service_id)
@@ -169,7 +169,7 @@ class TargetConsulSyncController:
 
         if event_type == 'ADDED' or event_type == 'MODIFIED':
             # AdditionalTarget is considered "ready" if it has an address
-            self._register_consul_service(service_name, service_id, at_address, at_port, tags)
+            self._register_consul_service(service_id, service_name, at_address, at_port, tags)
         elif event_type == 'DELETED':
             self._deregister_consul_service(service_id)
         else:
