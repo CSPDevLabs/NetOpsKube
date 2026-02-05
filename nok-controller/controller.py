@@ -20,8 +20,8 @@ ADDITIONAL_TARGET_CRD_PLURAL = "additionaltargets" # Plural name for your Additi
 CONSUL_HTTP_ADDR = os.getenv("CONSUL_HTTP_ADDR", "http://consul-svc-nok-base.nok-base.svc.cluster.local:8500")
 CONSUL_HTTP_TOKEN = os.getenv("CONSUL_HTTP_TOKEN")
 CONSUL_SERVICE_PORT = int(os.getenv("CONSUL_SERVICE_PORT", "57400"))
-ADDITIONAL_TARGET_SERVICE_NAME = 'additional-target'
-TARGET_SERVICE_NAME = 'network-element'
+ADDITIONAL_TARGET_TAG = 'additional-target'
+TARGET_TAG = 'network-element'
 
 # Logging setup
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -109,7 +109,7 @@ class TargetConsulSyncController:
         target_namespace = target_obj['metadata']['namespace']
         target_address = target_obj['spec'].get('address')
 
-        tags = []
+        tags = [TARGET_TAG]
         if target_obj['metadata'].get('labels'):
             region = target_obj['metadata']['labels'].get('sdcio.dev/region')
             if region:
@@ -122,7 +122,7 @@ class TargetConsulSyncController:
         logger.debug(f"Processing event: {event_type} for Target {target_namespace}/{target_name}")
 
         service_id = target_name
-        service_name = TARGET_SERVICE_NAME
+        service_name = target_name
 
         if not target_address:
             logger.warning(f"Target {target_namespace}/{target_name} has no 'spec.address'. Skipping.")
@@ -148,7 +148,7 @@ class TargetConsulSyncController:
         at_spec_tags = additional_target_obj['spec'].get('tags', [])
 
         # Combine spec.tags with other generated tags
-        tags = [f"k8s-crd-type:additionaltarget"]
+        tags = [ADDITIONAL_TARGET_TAG]
         for tag in at_spec_tags:
             tags.append(tag)
         if additional_target_obj['metadata'].get('labels'):
@@ -161,7 +161,7 @@ class TargetConsulSyncController:
         consul_id_base = additional_target_obj['spec'].get('id', at_name)
 
         service_id = consul_id_base
-        service_name = ADDITIONAL_TARGET_SERVICE_NAME # Using spec.name or metadata.name as Consul service name
+        service_name = consul_id_base # Using spec.name or metadata.name as Consul service name
 
         if not at_address:
             logger.warning(f"AdditionalTarget {at_namespace}/{at_name} has no 'spec.address'. Skipping.")
