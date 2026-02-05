@@ -1,0 +1,14 @@
+services:
+  registry:
+    image: registry:2
+    container_name: myregistry.local
+    restart: always
+    ports:
+      - "127.0.0.1:80:443"
+      - "127.0.0.1:443:443"
+    volumes:
+      - ./certs:/certs
+    environment:
+      REGISTRY_HTTP_TLS_CERTIFICATE: /certs/rootCA.pem
+      REGISTRY_HTTP_TLS_KEY: /certs/rootCA.decrypted.key
+      REGISTRY_HTTP_ADDR: 0.0.0.0:443
