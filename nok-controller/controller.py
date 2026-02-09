@@ -30,7 +30,7 @@ HTTP_SERVER_PORT = int(os.getenv("HTTP_SERVER_PORT", "8080"))
 HTTP_SERVER_HOST = os.getenv("HTTP_SERVER_HOST", "0.0.0.0")
 
 # Logging setup
-logging.basicConfig(level=logging.INFO, format='%asctime - %levelname - %message')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 class TargetConsulSyncController:
