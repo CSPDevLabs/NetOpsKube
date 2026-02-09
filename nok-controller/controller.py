@@ -1,9 +1,11 @@
+# controller.py
 import os
 import logging
 import time
 from kubernetes import client, config, watch
 import consul
 import threading
+from flask import Flask, jsonify # Import Flask and jsonify
 
 # --- Configuration ---
 # Kubernetes CRD details for Target
@@ -11,10 +13,10 @@ TARGET_CRD_GROUP = "inv.sdcio.dev"
 TARGET_CRD_VERSION = "v1alpha1"
 TARGET_CRD_PLURAL = "targets"
 
-# Kubernetes CRD details for AdditionalTarget (NEW)
+# Kubernetes CRD details for AdditionalTarget NEW
 ADDITIONAL_TARGET_CRD_GROUP = "nok.dev"
 ADDITIONAL_TARGET_CRD_VERSION = "v1alpha1"
-ADDITIONAL_TARGET_CRD_PLURAL = "additionaltargets" # Plural name for your AdditionalTarget CRD
+ADDITIONAL_TARGET_CRD_PLURAL = "additionaltargets"  # Plural name for your AdditionalTarget CRD
 
 # Consul configuration
 CONSUL_HTTP_ADDR = os.getenv("CONSUL_HTTP_ADDR", "http://consul-svc-nok-base.nok-base.svc.cluster.local:8500")
@@ -23,8 +25,12 @@ CONSUL_SERVICE_PORT = int(os.getenv("CONSUL_SERVICE_PORT", "57400"))
 ADDITIONAL_TARGET_TAG = 'additional-target'
 TARGET_TAG = 'network-element'
 
+# HTTP Server Configuration
+HTTP_SERVER_PORT = int(os.getenv("HTTP_SERVER_PORT", "8080"))
+HTTP_SERVER_HOST = os.getenv("HTTP_SERVER_HOST", "0.0.0.0")
+
 # Logging setup
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%asctime - %levelname - %message')
 logger = logging.getLogger(__name__)
 
 class TargetConsulSyncController:
@@ -66,7 +72,23 @@ class TargetConsulSyncController:
             scheme=consul_scheme,
             token=CONSUL_HTTP_TOKEN
         )
+
         logger.info(f"Initialized Consul client for {consul_url}")
+
+        # Initialize Flask app
+        self.app = Flask(__name__)
+        self.app.add_url_rule('/targets', 'get_targets', self._get_targets_json)
+
+        # Data structure to hold registered Target hostnames for the HTTP service
+        self.registered_target_hostnames = set()
+        self.target_hostnames_lock = threading.Lock()
+
+    def _get_targets_json(self):
+        """HTTP endpoint to return registered Target hostnames."""
+        with self.target_hostnames_lock:
+            # Convert set to a dictionary with empty strings as values
+            targets_dict = {hostname: "" for hostname in self.registered_target_hostnames}
+        return jsonify(targets_dict)
 
     def _is_target_ready(self, target_obj: dict) -> bool:
         """Checks if the Target resource has a 'Ready' condition with status 'True'."""
@@ -95,7 +117,7 @@ class TargetConsulSyncController:
         except Exception as e:
             logger.error(f"Failed to register/update Consul service '{service_name}' ID: {service_id}: {e}")
 
-    def _deregister_consul_service(self, service_id):
+    def _deregister_consul_service(self, service_id: str):
         """Deregisters a service from Consul."""
         try:
             self.consul_client.agent.service.deregister(service_id)
@@ -103,13 +125,13 @@ class TargetConsulSyncController:
         except Exception as e:
             logger.error(f"Failed to deregister Consul service ID '{service_id}': {e}")
 
-    def _process_target_event(self, event_type, target_obj):
+    def _process_target_event(self, event_type, target_obj: dict):
         """Processes events for Target CRDs."""
         target_name = target_obj['metadata']['name']
         target_namespace = target_obj['metadata']['namespace']
         target_address = target_obj['spec'].get('address')
 
-        tags = [TARGET_TAG]
+        tags = [TARGET_TAG] # Ensure tags is a list
         if target_obj['metadata'].get('labels'):
             region = target_obj['metadata']['labels'].get('sdcio.dev/region')
             if region:
@@ -123,32 +145,49 @@ class TargetConsulSyncController:
 
         service_id = target_name
         service_name = target_name
+        consul_hostname = f"{target_name}.service.consul" # Format for the HTTP service
 
         if not target_address:
             logger.warning(f"Target {target_namespace}/{target_name} has no 'spec.address'. Skipping.")
+            # If address is missing, ensure it's not in the HTTP service list
+            with self.target_hostnames_lock:
+                if consul_hostname in self.registered_target_hostnames:
+                    self.registered_target_hostnames.remove(consul_hostname)
+                    logger.info(f"Removed '{consul_hostname}' from HTTP service list due to missing address.")
             return
 
         if event_type == 'ADDED' or event_type == 'MODIFIED':
             if self._is_target_ready(target_obj):
                 self._register_consul_service(service_id, service_name, target_address, CONSUL_SERVICE_PORT, tags)
+                with self.target_hostnames_lock:
+                    self.registered_target_hostnames.add(consul_hostname)
+                    logger.info(f"Added '{consul_hostname}' to HTTP service list.")
             else:
                 logger.info(f"Target {target_namespace}/{target_name} is not 'Ready'. Deregistering if exists or skipping registration.")
                 self._deregister_consul_service(service_id)
+                with self.target_hostnames_lock:
+                    if consul_hostname in self.registered_target_hostnames:
+                        self.registered_target_hostnames.remove(consul_hostname)
+                        logger.info(f"Removed '{consul_hostname}' from HTTP service list as target is not ready.")
         elif event_type == 'DELETED':
             self._deregister_consul_service(service_id)
+            with self.target_hostnames_lock:
+                if consul_hostname in self.registered_target_hostnames:
+                    self.registered_target_hostnames.remove(consul_hostname)
+                    logger.info(f"Removed '{consul_hostname}' from HTTP service list due to deletion.")
         else:
             logger.warning(f"Unknown event type: {event_type} for Target {target_namespace}/{target_name}")
 
-    def _process_additional_target_event(self, event_type, additional_target_obj):
+    def _process_additional_target_event(self, event_type, additional_target_obj: dict):
         """Processes events for AdditionalTarget CRDs."""
         at_name = additional_target_obj['metadata']['name']
         at_namespace = additional_target_obj['metadata']['namespace']
         at_address = additional_target_obj['spec'].get('address')
-        at_port = additional_target_obj['spec'].get('port', CONSUL_SERVICE_PORT) # Use spec.port if available, else default
+        at_port = additional_target_obj['spec'].get('port', CONSUL_SERVICE_PORT)  # Use spec.port if available, else default
         at_spec_tags = additional_target_obj['spec'].get('tags', [])
 
         # Combine spec.tags with other generated tags
-        tags = [ADDITIONAL_TARGET_TAG]
+        tags = [ADDITIONAL_TARGET_TAG] # Ensure tags is a list
         for tag in at_spec_tags:
             tags.append(tag)
         if additional_target_obj['metadata'].get('labels'):
@@ -161,7 +200,7 @@ class TargetConsulSyncController:
         consul_id_base = additional_target_obj['spec'].get('id', at_name)
 
         service_id = consul_id_base
-        service_name = consul_id_base # Using spec.name or metadata.name as Consul service name
+        service_name = consul_id_base  # Using spec.name or metadata.name as Consul service name
 
         if not at_address:
             logger.warning(f"AdditionalTarget {at_namespace}/{at_name} has no 'spec.address'. Skipping.")
@@ -197,16 +236,28 @@ class TargetConsulSyncController:
                 logger.error(f"An unexpected error occurred for {crd_plural} CRD: {e}. Retrying in 5 seconds.")
                 time.sleep(5)
 
+    def _run_http_server(self):
+        """Runs the Flask HTTP server."""
+        logger.info(f"Starting HTTP server on {HTTP_SERVER_HOST}:{HTTP_SERVER_PORT}")
+        # Use app.run with debug=False for production, and specify host/port
+        self.app.run(host=HTTP_SERVER_HOST, port=HTTP_SERVER_PORT, debug=False)
+
     def run(self):
-        """Starts watching for Target and AdditionalTarget CRD events concurrently."""
+        """Starts watching for Target and AdditionalTarget CRD events concurrently and runs the HTTP server."""
         target_thread = threading.Thread(target=self._watch_crd, args=(TARGET_CRD_GROUP, TARGET_CRD_VERSION, TARGET_CRD_PLURAL, self._process_target_event))
         additional_target_thread = threading.Thread(target=self._watch_crd, args=(ADDITIONAL_TARGET_CRD_GROUP, ADDITIONAL_TARGET_CRD_VERSION, ADDITIONAL_TARGET_CRD_PLURAL, self._process_additional_target_event))
+        http_server_thread = threading.Thread(target=self._run_http_server, daemon=True) # daemon=True allows main program to exit even if this thread is running
 
         target_thread.start()
         additional_target_thread.start()
+        http_server_thread.start() # Start the HTTP server thread
 
+        # Join the CRD watching threads to keep the main thread alive
         target_thread.join()
         additional_target_thread.join()
+        # The http_server_thread is a daemon thread, so it will exit when the main program exits.
+        # If you want the main program to wait for the HTTP server, you would join it here,
+        # but typically for a controller, the main thread waits for the core logic.
 
 if __name__ == "__main__":
     controller = TargetConsulSyncController()
