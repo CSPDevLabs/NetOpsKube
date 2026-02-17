@@ -1,99 +1,105 @@
 
 
-1. Identify the Gitea Pod
+
+Identify the Gitea Pod
 First, you need to find the exact name of your Gitea pod.
 
 ```bash
-export GITEA_POD_NAME=$(kubectl get pods -n nok-base -l app.kubernetes.io/name=gitea -o jsonpath='{.items[0].metadata.name}')
+export GITEA_POD_NAME=$(kubectl get pods -n nok-git -l app.kubernetes.io/name=gitea -o jsonpath='{.items[0].metadata.name}')
 ```
 
 ```bash
-kubectl exec -it $GITEA_POD_NAME -n nok-base -- gitea admin user create \
+kubectl exec -it $GITEA_POD_NAME -n nok-git -- gitea admin user create \
   --username nok \
-  --password "YourSecurePasswordHere" \
+  --password "N0kP4ssw0rd" \
   --email "nok@example.com" \
-  --must-change-password false
-```
+  --must-change-password=false
+``` 
 
 
-Install flux
+
+```bash
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -u "nok:N0kP4ssw0rd" \
+  -d '{
+    "name": "flux-bootstrap",
+    "description": "Flux Bootstrap files.",
+    "private": false,
+    "auto_init": true
+  }' \
+gitea.nok.local/api/v1/user/repos
 ```
-curl -s https://fluxcd.io/install.sh | sudo bash
+
+```bash
+export SSH_PUB_KEY=$(cat ~/.ssh/id_ed25519.pub )
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -u "nok:N0kP4ssw0rd" \
+  -d "{
+    \"title\": \"flux ssh key\",
+    \"key\": \"$SSH_PUB_KEY\"
+  }" \
+  gitea.nok.local/api/v1/user/keys
 ```
-add `~/.ssh/id_ed25519.pub` to `nok` user profile settings for access
 
 Test connectivity
 ```
 ssh -T -i ~/.ssh/id_ed25519 git@172.18.0.102
 ```
 
-Create repo `/nok/flux-bootstrap.git`
+Install flux
+```
+curl -s https://fluxcd.io/install.sh | sudo bash
+```
 
 ```bash
- flux bootstrap git \
+ flux bootstrap git -s \
   --url=ssh://git@172.18.0.102/nok/flux-bootstrap.git \
   --private-key-file=$HOME/.ssh/id_ed25519 \
   --branch=main \
   --path=clusters/NetOpsKube
 ``` 
 
-Create repo `/nok/bng-sdcio-targets.git`
+Create repo for BNG targets and configurations
 
 ```bash
-flux create source git bng-sdcio \
-  --url=ssh://git@172.18.0.102/nok/bng-sdcio-targets.git \
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -u "nok:N0kP4ssw0rd" \
+  -d '{
+    "name": "nok-bng-resources",
+    "description": "BNG resources for Network Observability and Conf Management",
+    "private": false,
+    "auto_init": true
+  }' \
+gitea.nok.local/api/v1/user/repos
+```
+```bash
+flux create secret git nok-bng-auth \
+  --url=ssh://git@172.18.0.102/nok/nok-bng-resources.git \
+  --ssh-key-algorithm=ed25519 \
+  --private-key-file=$HOME/.ssh/id_ed25519 \
+  --namespace=flux-system
+```
+
+
+```bash
+flux create source git nok-bng-resources \
+  --url=ssh://git@172.18.0.102/nok/nok-bng-resources.git \
   --branch=main \
-  --secret-ref=bng-sdcio-auth \
+  --secret-ref=nok-bng-auth \
   --interval=1m \
   --namespace=flux-system
 ```
 
+Create resources running `./build/populate-git-bng-repo.sh`
+
+Go to the root folder of the repo and run
 ```bash
-flux create kustomization bng-sdcio \
-  --source=GitRepository/bng-sdcio \
-  --path="./" \
-  --prune=true \
-  --interval=1m \
-  --namespace=flux-system
-```  
+for d in */; do n=${d%/}; [ "$n" != ".git" ] && flux create kustomization "$n" --source=GitRepository/nok-bng-resources --path="./$n" --prune=true --interval=1m --namespace=flux-system; done
+```
 
 
 
 
-. Obtain an Admin API Token: To perform administrative actions like creating users and repositories, you need an API token from an existing Gitea administrator user. If you don't have an admin user yet, you might need to use kubectl exec once to create an initial admin user and generate a token.
-
-```bash
-kubectl exec -it $GITEA_POD_NAME -n nok-base -- gitea admin user create \
-  --username admin_api \
-  --password "AdminApiPassword" \
-  --email "admin_api@example.com" \
-  --must-change-password false \
-  --admin
-kubectl exec -it $GITEA_POD_NAME -n nok-base -- gitea admin user generate-access-token \
-  --username admin_api \
-  --token-name "api-automation-token"  
-```  
-
-3. Create the User nok via Gitea API: Use curl to send a POST request to the Gitea API to create the user.
-
-```bash
-GITEA_URL="http://gitea.nok.local" # Or https if you have TLS configured
-GITEA_TOKEN="ced2d43795cc5f796a6c0f3069bb955c3ac673bd" # Replace with your actual token
-
-curl -X POST "${GITEA_URL}/api/v1/admin/users" \
-  -H "Authorization: token ${GITEA_TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{
-        "username": "nok2",
-        "email": "nok2@example.com",
-        "password": "YourSecurePasswordForNok",
-        "must_change_password": false,
-        "send_notify": false,
-        "source_id": 0,
-        "login_name": "nok",
-        "restricted": false,
-        "prohibit_login": false,
-        "active": true,
-        "admin": false
-      }'
-```    
