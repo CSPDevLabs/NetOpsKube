@@ -114,7 +114,7 @@ define INSTALL_KPT_PACKAGE
 endef
 
 .PHONY: try-nok
-try-nok: check-tools cluster-up git-clone-kpt git-clone-clab install-base-pkg install-lb-pkg start-ingress-port-forward
+try-nok: check-tools cluster-up git-clone-kpt git-clone-clab install-base-pkg install-lb-pkg install-prom-oper install-gnmic-oper start-ingress-port-forward
 
 .PHONY: deploy-bng
 deploy-bng: try-nok install-bng-pkg  destroy-clab-bng deploy-clab-bng
@@ -359,3 +359,38 @@ install-lb-pkg: check-tools git-clone-kpt install-base-pkg wait-for-metallb-read
 .PHONY: install-bng-pkg
 install-bng-pkg: check-tools git-clone-kpt install-base-pkg install-lb-pkg ## Installs the base kpt package from ./nok-kpt/nok-bng
 	@$(call INSTALL_KPT_PACKAGE,$(NOK_KPT_DIR)/nok-bng,nok-bng,"--reconcile-timeout=5m", "--inventory-policy=adopt")		
+
+.PHONY: install-git-pkg
+install-git-pkg: check-tools git-clone-kpt install-base-pkg install-lb-pkg ## Installs the base kpt package from ./nok-kpt/nok-bng
+	@$(call INSTALL_KPT_PACKAGE,$(NOK_KPT_DIR)/nok-git,nok-git,"--reconcile-timeout=5m", "--inventory-policy=adopt")	
+
+
+.PHONY: install-prom-oper
+install-prom-oper: $(KUBECTL) ## Installs the Prometheus Operator manifest
+	@echo -e "--> INSTALL: [\033[1;34mPrometheus Operator\033[0m] - Checking prerequisites..."
+	@if ! $(KUBECTL) version --client &>/dev/null; then \
+		echo "[ERROR]: kubectl is not working or not configured. Please ensure your kubeconfig is set." >&2; \
+		exit 1; \
+	fi
+	@if [ ! -f "./nok-kpt/nok-base-prometheus-oper/manifest-prometheus-oper.yaml" ]; then \
+		echo "[ERROR]: Prometheus Operator manifest not found at ./nok-kpt/nok-base-prometheus-oper/manifest-prometheus-oper.yaml" >&2; \
+		exit 1; \
+	fi
+	@echo -e "--> INSTALL: [\033[1;34mPrometheus Operator\033[0m] - Applying manifest..."
+	@$(KUBECTL) create -f ./nok-kpt/nok-base-prometheus-oper/manifest-prometheus-oper.yaml
+	@echo -e "--> INSTALL: [\033[0;32mPrometheus Operator\033[0m] - Manifest applied successfully."
+
+.PHONY: install-gnmic-oper
+install-gnmic-oper: $(KUBECTL) ## Installs the Prometheus Operator manifest
+	@echo -e "--> INSTALL: [\033[1;34mGNMIc Operator\033[0m] - Checking prerequisites..."
+	@if ! $(KUBECTL) version --client &>/dev/null; then \
+		echo "[ERROR]: kubectl is not working or not configured. Please ensure your kubeconfig is set." >&2; \
+		exit 1; \
+	fi
+	@if [ ! -f "./nok-kpt/nok-base-gnmic-oper/install.yaml" ]; then \
+		echo "[ERROR]: Prometheus Operator manifest not found at ./nok-kpt/nok-base-gnmic-oper/install.yaml" >&2; \
+		exit 1; \
+	fi
+	@echo -e "--> INSTALL: [\033[1;34mPrometheus Operator\033[0m] - Applying manifest..."
+	@$(KUBECTL) create -f ./nok-kpt/nok-base-gnmic-oper/install.yaml
+	@echo -e "--> INSTALL: [\033[0;32mPrometheus Operator\033[0m] - Manifest applied successfully."
