@@ -1,0 +1,61 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: target-consul-sync-controller
+  namespace: nok-base # Ensure this namespace exists or change it
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: target-consul-sync-controller-role
+rules:
+- apiGroups: ["inv.sdcio.dev"] # API group of your Target CRD
+  resources: ["targets"]       # Plural name of your Target CRD
+  verbs: ["get", "list", "watch"] # Permissions to watch Target resources
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: target-consul-sync-controller-binding
+subjects:
+- kind: ServiceAccount
+  name: target-consul-sync-controller
+  namespace: nok-base # Must match the ServiceAccount namespace
+roleRef:
+  kind: ClusterRole
+  name: target-consul-sync-controller-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: target-consul-sync-controller
+  namespace: nok-base # Ensure this namespace exists or change it
+  labels:
+    app: target-consul-sync-controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: target-consul-sync-controller
+  template:
+    metadata:
+      labels:
+        app: target-consul-sync-controller
+    spec:
+      serviceAccountName: target-consul-sync-controller
+      containers:
+      - name: controller
+        image: target-consul-sync-controller:0.1a # Replace with your built image
+        command: ["python", "/app/controller.py"]
+        env:
+        - name: CONSUL_HTTP_ADDR
+          value: "consul-svc.nok-base.svc.cluster.local:8500" # Adjust if Consul is in a different namespace/service name
+        - name: CONSUL_SERVICE_PORT
+          value: "57400" # Default gNMI port, adjust if needed
+        # Uncomment and configure if Consul ACLs are enabled
+        # - name: CONSUL_HTTP_TOKEN
+        #   valueFrom:
+        #     secretKeyRef:
+        #       name: consul-acl-token # Name of your Kubernetes secret holding the Consul token
+        #       key: token # Key within the secret

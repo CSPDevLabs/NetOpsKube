@@ -1,0 +1,254 @@
+# Source: consul/templates/sync-catalog-serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: consul-k8s-controller-consul-sync-catalog
+  namespace: nok-base
+  labels:
+    app: consul
+    chart: consul-helm
+    heritage: Helm
+    release: consul-k8s-controller
+    component: sync-catalog
+---
+# Source: consul/templates/server-clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: consul-k8s-controller-consul-server
+  namespace: nok-base
+  labels:
+    app: consul
+    chart: consul-helm
+    heritage: Helm
+    release: consul-k8s-controller
+    component: server
+rules:
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs:
+  - get
+---
+# Source: consul/templates/sync-catalog-clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: consul-k8s-controller-consul-sync-catalog
+  labels:
+    app: consul
+    chart: consul-helm
+    heritage: Helm
+    release: consul-k8s-controller
+    component: sync-catalog
+rules:
+- apiGroups: [""]
+  resources:
+  - services
+  verbs:
+  - get
+  - list
+  - watch
+  - update
+  - patch
+  - delete
+  - create
+- apiGroups: ["discovery.k8s.io"]
+  resources:
+  - endpointslices
+  verbs:
+  - get
+  - list
+  - watch
+  - update
+  - patch
+  - delete
+  - create
+- apiGroups: [""]
+  resources:
+  - nodes
+  verbs:
+  - get
+- apiGroups: ["networking.k8s.io"]
+  resources:
+  - ingresses
+  verbs:
+  - get
+  - list
+  - watch
+---
+# Source: consul/templates/server-clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: consul-k8s-controller-consul-server
+  labels:
+    app: consul
+    chart: consul-helm
+    heritage: Helm
+    release: consul-k8s-controller
+    component: server
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: consul-k8s-controller-consul-server
+subjects:
+- kind: ServiceAccount
+  name: consul-k8s-controller-consul-server
+  namespace: nok-base
+---
+# Source: consul/templates/sync-catalog-clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: consul-k8s-controller-consul-sync-catalog
+  labels:
+    app: consul
+    chart: consul-helm
+    heritage: Helm
+    release: consul-k8s-controller
+    component: sync-catalog
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: consul-k8s-controller-consul-sync-catalog
+subjects:
+  - kind: ServiceAccount
+    name: consul-k8s-controller-consul-sync-catalog
+    namespace: nok-base
+---
+# Source: consul/templates/dns-service.yaml
+# Service for Consul DNS.
+apiVersion: v1
+kind: Service
+metadata:
+  name: consul-k8s-controller-consul-dns
+  namespace: nok-base
+  labels:
+    app: consul
+    chart: consul-helm
+    heritage: Helm
+    release: consul-k8s-controller
+    component: dns
+spec:
+  type: ClusterIP
+  ports:
+    - name: dns-tcp
+      port: 53
+      protocol: "TCP"
+      targetPort: dns-tcp
+    - name: dns-udp
+      port: 53
+      protocol: "UDP"
+      targetPort: dns-udp
+  selector:
+    app: consul
+    release: "consul-k8s-controller"
+    hasDNS: "true"
+---
+# Source: consul/templates/sync-catalog-deployment.yaml
+# The deployment for running the sync-catalog pod
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: consul-k8s-controller-consul-sync-catalog
+  namespace: nok-base
+  labels:
+    app: consul
+    chart: consul-helm
+    heritage: Helm
+    release: consul-k8s-controller
+    component: sync-catalog
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: consul
+      chart: consul-helm
+      release: consul-k8s-controller
+      component: sync-catalog
+  template:
+    metadata:
+      labels:
+        app: consul
+        chart: consul-helm
+        release: consul-k8s-controller
+        component: sync-catalog
+      annotations:
+        "consul.hashicorp.com/connect-inject": "false"
+        "consul.hashicorp.com/mesh-inject": "false"
+    spec:
+      serviceAccountName: consul-k8s-controller-consul-sync-catalog
+      volumes:
+      containers:
+      - name: sync-catalog
+        image: "hashicorp/consul-k8s-control-plane:1.9.0"
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+          runAsUser: 100
+        env:
+        - name: CONSUL_ADDRESSES
+          value: consul-svc.nok-base.svc.cluster.local
+        - name: CONSUL_GRPC_PORT
+          value: "8502"
+        - name: CONSUL_HTTP_PORT
+          value: "8500"
+        - name: CONSUL_DATACENTER
+          value: dc1
+        - name: CONSUL_API_TIMEOUT
+          value: 5s
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        volumeMounts:
+        command:
+        - "/bin/sh"
+        - "-ec"
+        - |
+          exec consul-k8s-control-plane sync-catalog \
+            -log-level=info \
+            -log-json=false \
+            -k8s-default-sync=true \
+            -consul-domain=consul \
+            -allow-k8s-namespace="*" \
+            -deny-k8s-namespace="kube-system" \
+            -deny-k8s-namespace="kube-public" \
+            -k8s-write-namespace=${NAMESPACE} \
+            -node-port-sync-type=ExternalFirst \
+            -consul-node-name=k8s-sync \
+            -add-k8s-namespace-suffix \
+            -prometheus-retention-time=1m \
+        livenessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8080
+            scheme: HTTP
+          failureThreshold: 3
+          initialDelaySeconds: 30
+          periodSeconds: 5
+          successThreshold: 1
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8080
+            scheme: HTTP
+          failureThreshold: 5
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          successThreshold: 1
+          timeoutSeconds: 5
+        resources:
+          limits:
+            cpu: 50m
+            memory: 50Mi
+          requests:
+            cpu: 50m
+            memory: 50Mi

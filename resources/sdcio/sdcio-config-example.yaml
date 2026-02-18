@@ -1,0 +1,21 @@
+apiVersion: config.sdcio.dev/v1alpha1
+kind: Config
+metadata:
+  name: vpls-1020-sros-test
+  namespace: nok-bng
+  labels:
+    config.sdcio.dev/targetName: clab-sros-bngt-bng1
+    config.sdcio.dev/targetNamespace: nok-bng
+spec:
+  priority: 10
+  config:
+  - path: /configure/service
+    value:
+      customer:
+        customer-name: "10020"
+        customer-id: 10020       
+      # vprn:
+      #   service-name: "EVPN-USER-DATA-10020"
+      #   customer: "10020"
+      #   service-id: 10020
+      #   admin-state: "enable"

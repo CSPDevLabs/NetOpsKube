@@ -1,0 +1,93 @@
+name: Build and Push nok-controller Docker Image
+
+on:
+  push:
+    tags:
+      - 'v*' # Trigger on any tag starting with 'v' (e.g., v1.0.0, v2.1-beta)
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # Required to push images to GitHub Container Registry
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Required to fetch all history for git commands
+
+      - name: Check for changes in nok-controller folder since last tag
+        id: check_folder_changes
+        run: |
+          CURRENT_COMMIT_SHA=${{ github.sha }}
+          echo "Current tagged commit SHA: $CURRENT_COMMIT_SHA"
+
+          # Find the commit SHA of the previous tag in the history of the current commit.
+          # This command finds the most recent tag that is an ancestor of the current commit,
+          # but is not the current tag itself.
+          PREVIOUS_TAG_COMMIT_SHA=$(git rev-list --tags --max-count=1 --skip=1 $CURRENT_COMMIT_SHA)
+
+          if [ -z "$PREVIOUS_TAG_COMMIT_SHA" ]; then
+            echo "No previous tag found in the history of $CURRENT_COMMIT_SHA."
+            echo "Assuming this is the first relevant tag or a major initial release."
+            echo "Proceeding with build as all changes are considered new."
+            echo "folder_changed=true" >> $GITHUB_OUTPUT
+          else
+            # Get the name of the previous tag for logging purposes
+            PREVIOUS_TAG_NAME=$(git describe --tags --exact-match $PREVIOUS_TAG_COMMIT_SHA 2>/dev/null || echo "$PREVIOUS_TAG_COMMIT_SHA (no exact tag name)")
+            echo "Previous tag commit SHA: $PREVIOUS_TAG_COMMIT_SHA (Tag: $PREVIOUS_TAG_NAME)"
+
+            # Compare the current tagged commit with the previous tagged commit
+            # This will show all changes between the two tags
+            CHANGED_FILES=$(git diff --name-only $PREVIOUS_TAG_COMMIT_SHA $CURRENT_COMMIT_SHA)
+            echo "Changed files between $PREVIOUS_TAG_NAME and $CURRENT_COMMIT_SHA:"
+            echo "$CHANGED_FILES"
+
+            if echo "$CHANGED_FILES" | grep -q '^nok-controller/'; then
+              echo "Changes detected in nok-controller folder since previous tag. Proceeding with build."
+              echo "folder_changed=true" >> $GITHUB_OUTPUT
+            else
+              echo "No changes detected in nok-controller folder since previous tag. Skipping build."
+              echo "folder_changed=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Set up Docker Buildx
+        if: steps.check_folder_changes.outputs.folder_changed == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: steps.check_folder_changes.outputs.folder_changed == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        if: steps.check_folder_changes.outputs.folder_changed == 'true'
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/nok-controller
+          tags: |
+            type=ref,event=tag
+            type=sha,format=short
+          labels: |
+            org.opencontainers.image.source=${{ github.event.repository.html_url }}
+            org.opencontainers.image.created=${{ steps.meta.outputs.created }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Build and push Docker image
+        if: steps.check_folder_changes.outputs.folder_changed == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: ./nok-controller
+          file: ./nok-controller/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
