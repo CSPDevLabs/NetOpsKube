@@ -4,7 +4,7 @@
 kpt
 
 # ignoring private dir
-private
+private/
 
 # ignore build dir
 site
@@ -17,3 +17,16 @@ nok-kpt/
 nok-clabs/
 .env
 .envrc
+
+# SROS Licenses 
+srsim-lic-25.txt
+
+# Some wide used license files
+*.lic
+*.license
+
+# Log files
+*.log
+
+# Python
+.venv/
