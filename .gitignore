@@ -15,6 +15,7 @@ build/
 catalog/
 nok-kpt/
 nok-clabs/
+nok-bng-resources/
 .env
 .envrc
 

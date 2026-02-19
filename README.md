@@ -48,8 +48,11 @@ The Makefile does not define an all target. The most comprehensive targets for s
 #### make try-nok
 Purpose: This target sets up the foundational Kubernetes environment, including the Kind cluster and core services like an ingress controller and a load balancer. It prepares the cluster for subsequent application deployments.
 
-#### make deploy-bng
+#### make install-bng-pkg
 Purpose: This target extends the try-nok setup by deploying the Nokia BNG (Broadband Network Gateway) application within the Kubernetes cluster and provisioning its associated Containerlab network topology. 
+
+#### make install-git-pkg (optional)
+Purpose: This target extends the bng setup by deploying Gitea application for GitOps experience. Follow Flux/Setup documentation after. 
 
 ## Create Cluster
 
