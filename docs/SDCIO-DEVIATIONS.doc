@@ -1,0 +1,61 @@
+more info at: https://docs.sdcio.dev/user-guide/deviation/
+
+A deviation is a report indicating differences between the actual device or system configuration and the configuration specified in one or more Config CRs managed by SDC.
+
+In Browfield Env, all the deviations with target type, are pre-exiting configurations in the network elements. Those are marked as UNHANDLED. They can not be managed. However, you can create a new Intent overwriting those values.
+
+```bash
+NAMESPACE   NAME                                             TYPE     TARGET                        DEVIATIONS
+nok-bng     deviation.config.sdcio.dev/clab-sros-bngt-agg    target   nok-bng/clab-sros-bngt-agg    332
+nok-bng     deviation.config.sdcio.dev/clab-sros-bngt-bng1   target   nok-bng/clab-sros-bngt-bng1   517
+nok-bng     deviation.config.sdcio.dev/clab-sros-bngt-bng2   target   nok-bng/clab-sros-bngt-bng2   519
+nok-bng     deviation.config.sdcio.dev/clab-sros-bngt-core   target   nok-bng/clab-sros-bngt-core   308
+```
+
+If you have an intent:
+
+```yaml
+kind: Config
+metadata:
+  name: vprn-10020-sros-bng1
+  namespace: nok-bng
+  labels:
+    config.sdcio.dev/targetName: clab-sros-bngt-bng1
+    config.sdcio.dev/targetNamespace: nok-bng
+spec:
+
+  priority: 10
+  revertive: false
+  config:
+  - path: /configure/service
+    value:     
+      vprn:
+        service-name: "VPRN-DATA-10020"
+        customer: "1"
+        service-id: 10020
+        admin-state: "enable"
+```        
+
+`revertive: false` indicates that any change on those values from the device will be reverted to the intent value, with no action.
+I you use `revertive: true`, then those deviations will be shown as `NOT-APPLIED` and they need to be reverted removing the deviations (editig CR Config associated resource or just deleting it)
+
+
+In Summary, there are three types of deviations:
+
+UNHANDLED
+
+- No matching Config CR exists in the system.
+- Treated as a Target-type deviation.
+- SDC only reports these deviations; no corrective action is taken.
+
+NOT-APPLIED
+
+- A matching Config CR exists, but the actual configuration differs from what is defined in the Config CR.
+- SDC will act on these deviations based on the configured mode: revertive or non-revertive.
+
+OVERRULED
+
+- A matching Config CR exists, but the actual configuration has been overridden by a higher-priority intent.
+- SDC reports these deviations but does not attempt to change the overriding configuration.
+
+Additonally, you can build an extra option called `blame` for kubectl to indentify multiple `NOT-APPLIED` deviations at once to all the intents: https://github.com/sdcio/kubectl-sdcio
