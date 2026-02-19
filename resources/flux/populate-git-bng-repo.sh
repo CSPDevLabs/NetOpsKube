@@ -7,7 +7,7 @@ BRANCH="main"
 SSH_KEY="$HOME/.ssh/id_ed25519"
 
 # Double-check this base URL in your browser to ensure it's public/accessible
-BASE_RAW_URL="https://raw.githubusercontent.com/CSPDevLabs/kpt/refs/heads/mau_gnmi_operator/nok-bng"
+BASE_RAW_URL="https://raw.githubusercontent.com/CSPDevLabs/kpt/refs/heads/mau_sdcio_fixing/nok-bng"
 
 # Mapping: "Local Path" -> "Remote File Path (Relative to BASE_RAW_URL)"
 declare -A FILES_TO_DOWNLOAD=(

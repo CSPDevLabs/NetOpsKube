@@ -125,6 +125,8 @@ After populating the nok-bng-resources repository with your BNG configurations (
 Navigate to the root folder of your `nok-bng-resources` repository clone:
 
 ```bash
+cd nok-bng-resources
+
 for d in */; do 
   n=${d%/};  
   if [ "$n" != ".git" ]; then

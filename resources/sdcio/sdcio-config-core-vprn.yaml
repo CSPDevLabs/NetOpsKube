@@ -1,0 +1,19 @@
+apiVersion: config.sdcio.dev/v1alpha1
+kind: Config
+metadata:
+  name: vprn-10020-sros-core
+  namespace: nok-bng
+  labels:
+    config.sdcio.dev/targetName: clab-sros-bngt-core
+    config.sdcio.dev/targetNamespace: nok-bng
+spec:
+  priority: 10
+  revertive: true
+  config:
+  - path: /configure/service
+    value:     
+      vprn:
+        service-name: "VPRN-DATA-10020"
+        customer: "1"
+        service-id: 10020
+        admin-state: "enable"
