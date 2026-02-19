@@ -74,7 +74,7 @@ sudo make deploy bng
 
 To generate BNG subscribe sessions and traffic:
 ```bash
-sudo docker exec -it clab-sros_bngt-bngblaster bash -c 'bngblaster -C pppoe.json -I -l dhcp'
+sudo docker exec -it clab-sros-bngt-bngblaster bash -c 'bngblaster -C pppoe.json -I -l dhcp'
 ```
 This use case is based in a previous clab deployment. More details at https://github.com/CSPDevLabs/sros_bng_observability
 
