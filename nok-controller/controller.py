@@ -9,27 +9,17 @@ from flask import Flask, jsonify
 import ping3 # For soft ping
 
 # --- Configuration ---
-# Kubernetes CRD details for Target (inv.sdcio.dev)
-SDCIO_TARGET_CRD_GROUP = "inv.sdcio.dev"
-SDCIO_TARGET_CRD_VERSION = "v1alpha1"
-SDCIO_TARGET_CRD_PLURAL = "targets"
-
-# Kubernetes CRD details for AdditionalTarget (nok.dev)
-ADDITIONAL_TARGET_CRD_GROUP = "nok.dev"
-ADDITIONAL_TARGET_CRD_VERSION = "v1alpha1"
-ADDITIONAL_TARGET_CRD_PLURAL = "additionaltargets"
-
-# Kubernetes CRD details for NetworkDeviceTarget (nok.dev)
+# Kubernetes CRD details for NetworkDeviceTarget (nok.dev) - Primary input for this controller
 NETWORK_DEVICE_TARGET_CRD_GROUP = "nok.dev"
 NETWORK_DEVICE_TARGET_CRD_VERSION = "v1alpha1"
 NETWORK_DEVICE_TARGET_CRD_PLURAL = "networkdevicetargets"
 
-# Kubernetes CRD details for operator.gnmic.dev/v1alpha1 Target
+# Kubernetes CRD details for operator.gnmic.dev/v1alpha1 Target - Managed by this controller
 GNMIC_TARGET_CRD_GROUP = "operator.gnmic.dev"
 GNMIC_TARGET_CRD_VERSION = "v1alpha1"
 GNMIC_TARGET_CRD_PLURAL = "targets"
 
-# Kubernetes CRD details for inv.sdcio.dev/v1alpha1 DiscoveryRule
+# Kubernetes CRD details for inv.sdcio.dev/v1alpha1 DiscoveryRule - Managed by this controller
 SDCIO_DISCOVERY_RULE_CRD_GROUP = "inv.sdcio.dev"
 SDCIO_DISCOVERY_RULE_CRD_VERSION = "v1alpha1"
 SDCIO_DISCOVERY_RULE_CRD_PLURAL = "discoveryrules"
@@ -70,6 +60,7 @@ class NetworkDeviceController:
         self.app.add_url_rule('/targets', 'get_targets', self._get_targets_json)
 
         # Data structure to hold registered Target hostnames for the HTTP service
+        # This will now be populated by NetworkDeviceTargets
         self.registered_http_hostnames = set()
         self.http_hostnames_lock = threading.Lock()
 
@@ -85,56 +76,44 @@ class NetworkDeviceController:
             targets_dict = {hostname: "" for hostname in self.registered_http_hostnames}
         return jsonify(targets_dict)
 
-    def _is_target_ready(self, target_obj: dict) -> bool:
-        """Checks if the Target resource has a 'Ready' condition with status 'True'."""
-        status = target_obj.get('status')
-        if not status:
-            return False
-        conditions = status.get('conditions')
-        if not conditions:
-            return False
-        for condition in conditions:
-            if condition.get('type') == 'Ready' and condition.get('status') == 'True':
-                return True
-        return False
+    def _check_reachability(self, address: str) -> str:
+        """Performs a soft ping to the given address and returns 'Reachable' or 'Unreachable'."""
+        try:
+            # ping3.ping returns latency in seconds, or False if unreachable
+            delay = ping3.ping(address, timeout=1, unit='ms')
+            if delay is not False:
+                logger.debug(f"Ping to {address} successful, latency: {delay:.2f} ms")
+                return "Reachable"
+            else:
+                logger.debug(f"Ping to {address} failed.")
+                return "Unreachable"
+        except Exception as e:
+            logger.error(f"Error during reachability check for {address}: {e}")
+            return "Unknown"
 
-    def _process_sdcio_target_event(self, event_type, target_obj: dict):
-        """
-        Processes events for SDCIO Target CRDs.
-        This method no longer interacts with Consul. It will only log the event.
-        If these SDCIO Targets are still meant to be exposed via the HTTP service,
-        you would add logic here to manage self.registered_http_hostnames.
-        """
-        target_name = target_obj['metadata']['name']
-        target_namespace = target_obj['metadata']['namespace']
-        logger.info(f"Processing event: {event_type} for SDCIO Target {target_namespace}/{target_name}. (No external service integration)")
-        # Example if you want to add them to the HTTP service list:
-        # http_service_hostname = f"{target_name}.sdcio-target.local"
-        # if event_type == 'ADDED' or event_type == 'MODIFIED':
-        #     with self.http_hostnames_lock:
-        #         self.registered_http_hostnames.add(http_service_hostname)
-        # elif event_type == 'DELETED':
-        #     with self.http_hostnames_lock:
-        #         self.registered_http_hostnames.discard(http_service_hostname)
-
-    def _process_additional_target_event(self, event_type, additional_target_obj: dict):
-        """
-        Processes events for AdditionalTarget CRDs.
-        This method no longer interacts with Consul. It will only log the event.
-        If these AdditionalTargets are still meant to be exposed via the HTTP service,
-        you would add logic here to manage self.registered_http_hostnames.
-        """
-        at_name = additional_target_obj['metadata']['name']
-        at_namespace = additional_target_obj['metadata']['namespace']
-        logger.info(f"Processing event: {event_type} for AdditionalTarget {at_namespace}/{at_name}. (No external service integration)")
-        # Example if you want to add them to the HTTP service list:
-        # http_service_hostname = f"{at_name}.additional-target.local"
-        # if event_type == 'ADDED' or event_type == 'MODIFIED':
-        #     with self.http_hostnames_lock:
-        #         self.registered_http_hostnames.add(http_service_hostname)
-        # elif event_type == 'DELETED':
-        #     with self.http_hostnames_lock:
-        #         self.registered_http_hostnames.discard(http_service_hostname)
+    def _update_network_device_target_status(self, ndt_namespace: str, ndt_name: str, status: str):
+        """Updates the status subresource of a NetworkDeviceTarget CRD."""
+        now = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+        status_body = {
+            "status": {
+                "reachability": status,
+                "lastProbeTime": now
+            }
+        }
+        try:
+            self.k8s_api.patch_namespaced_custom_object_status(
+                group=NETWORK_DEVICE_TARGET_CRD_GROUP,
+                version=NETWORK_DEVICE_TARGET_CRD_VERSION,
+                name=ndt_name,
+                namespace=ndt_namespace,
+                plural=NETWORK_DEVICE_TARGET_CRD_PLURAL,
+                body=status_body
+            )
+            logger.info(f"Updated NetworkDeviceTarget {ndt_namespace}/{ndt_name} status to: {status}")
+        except ApiException as e:
+            logger.error(f"Error updating status for NetworkDeviceTarget {ndt_namespace}/{ndt_name}: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error updating status for NetworkDeviceTarget {ndt_namespace}/{ndt_name}: {e}")
 
     def _ensure_gnmic_target(self, ndt_obj: dict, create: bool):
         """
@@ -367,45 +346,6 @@ class NetworkDeviceController:
             else:
                 logger.error(f"Error ensuring DiscoveryRule {discovery_rule_namespace}/{discovery_rule_name}: {e}")
 
-    def _check_reachability(self, address: str) -> str:
-        """Performs a soft ping to the given address and returns 'Reachable' or 'Unreachable'."""
-        try:
-            # ping3.ping returns latency in seconds, or False if unreachable
-            delay = ping3.ping(address, timeout=1, unit='ms')
-            if delay is not False:
-                logger.debug(f"Ping to {address} successful, latency: {delay:.2f} ms")
-                return "Reachable"
-            else:
-                logger.debug(f"Ping to {address} failed.")
-                return "Unreachable"
-        except Exception as e:
-            logger.error(f"Error during reachability check for {address}: {e}")
-            return "Unknown"
-
-    def _update_network_device_target_status(self, ndt_namespace: str, ndt_name: str, status: str):
-        """Updates the status subresource of a NetworkDeviceTarget CRD."""
-        now = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
-        status_body = {
-            "status": {
-                "reachability": status,
-                "lastProbeTime": now
-            }
-        }
-        try:
-            self.k8s_api.patch_namespaced_custom_object_status(
-                group=NETWORK_DEVICE_TARGET_CRD_GROUP,
-                version=NETWORK_DEVICE_TARGET_CRD_VERSION,
-                name=ndt_name,
-                namespace=ndt_namespace,
-                plural=NETWORK_DEVICE_TARGET_CRD_PLURAL,
-                body=status_body
-            )
-            logger.info(f"Updated NetworkDeviceTarget {ndt_namespace}/{ndt_name} status to: {status}")
-        except ApiException as e:
-            logger.error(f"Error updating status for NetworkDeviceTarget {ndt_namespace}/{ndt_name}: {e}")
-        except Exception as e:
-            logger.error(f"Unexpected error updating status for NetworkDeviceTarget {ndt_namespace}/{ndt_name}: {e}")
-
     def _process_network_device_target_event(self, event_type, ndt_obj: dict):
         """Processes events for NetworkDeviceTarget CRDs."""
         ndt_name = ndt_obj['metadata']['name']
@@ -515,28 +455,20 @@ class NetworkDeviceController:
 
     def run(self):
         """Starts watching for CRD events concurrently and runs the HTTP server."""
-        # Original CRD watches (SDCIO Target and AdditionalTarget)
-        sdcio_target_thread = threading.Thread(target=self._watch_crd, args=(SDCIO_TARGET_CRD_GROUP, SDCIO_TARGET_CRD_VERSION, SDCIO_TARGET_CRD_PLURAL, self._process_sdcio_target_event))
-        additional_target_thread = threading.Thread(target=self._watch_crd, args=(ADDITIONAL_TARGET_CRD_GROUP, ADDITIONAL_TARGET_CRD_VERSION, ADDITIONAL_TARGET_CRD_PLURAL, self._process_additional_target_event))
-
-        # NEW: NetworkDeviceTarget CRD watch
+        # Only watch for NetworkDeviceTarget CRD events
         network_device_target_thread = threading.Thread(target=self._watch_crd, args=(NETWORK_DEVICE_TARGET_CRD_GROUP, NETWORK_DEVICE_TARGET_CRD_VERSION, NETWORK_DEVICE_TARGET_CRD_PLURAL, self._process_network_device_target_event))
 
-        # NEW: Reachability check loop
+        # Reachability check loop
         reachability_thread = threading.Thread(target=self._reachability_loop, daemon=True)
 
         http_server_thread = threading.Thread(target=self._run_http_server, daemon=True)
 
-        sdcio_target_thread.start()
-        additional_target_thread.start()
-        network_device_target_thread.start() # Start the new NDT watch
+        network_device_target_thread.start() # Start the NDT watch
         reachability_thread.start() # Start the reachability loop
         http_server_thread.start()
 
-        # Join the CRD watching threads to keep the main thread alive
-        sdcio_target_thread.join()
-        additional_target_thread.join()
-        network_device_target_thread.join() # Join the new NDT watch thread
+        # Join the CRD watching thread to keep the main thread alive
+        network_device_target_thread.join()
         # The http_server_thread and reachability_thread are daemon threads, so they will exit when the main program exits.
 
 if __name__ == "__main__":
