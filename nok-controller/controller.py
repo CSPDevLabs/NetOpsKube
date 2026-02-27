@@ -10,7 +10,7 @@ from flask import Flask, jsonify
 import ping3 # For soft ping
 
 # --- Configuration ---
-# Kubernetes CRD details for Target (inv.sdcio.dev) - Renamed from original for clarity
+# Kubernetes CRD details for Target (inv.sdcio.dev) - Renamed from original for clarity 
 SDCIO_TARGET_CRD_GROUP = "inv.sdcio.dev"
 SDCIO_TARGET_CRD_VERSION = "v1alpha1"
 SDCIO_TARGET_CRD_PLURAL = "targets" # Original controller's target
