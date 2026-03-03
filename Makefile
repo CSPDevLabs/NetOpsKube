@@ -91,15 +91,21 @@ DOWNLOAD_TOOLS_LIST := $(KIND) $(KUBECTL) $(HELM) $(KPT) $(K9S) $(YQ) $(GH) $(CL
 # --- Flux & Gitea GitOps Configuration ---
 GITEA_NAMESPACE ?= nok-git
 GITEA_HOST ?= gitea.nok.local
+GITEA_IP ?= 172.18.0.100
 GITEA_SSH_HOST ?= 172.18.0.102
 GITEA_ADMIN_USER ?= nok
 GITEA_ADMIN_PASS ?= N0kP4ssw0rd
 GITEA_ADMIN_EMAIL ?= nok@example.com
 
 FLUX_GIT_REPO ?= flux-bootstrap
+FLUX_BNG_REPO ?= nok-bng-resources
+FLUX_BNG_SECRET ?= nok-bng-auth
 FLUX_GIT_BRANCH ?= main
 FLUX_CLUSTER_PATH ?= clusters/NetOpsKube
 FLUX_SSH_KEY ?= $(HOME)/.ssh/id_ed25519
+
+BNG_MANIFESTS_DIR := ./nok-clabs/nok-bng/nok-manifests
+BNG_REPO_URL := ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_BNG_REPO).git
 
 define GET_GITEA_POD
 $(shell $(KUBECTL) get pods -n $(GITEA_NAMESPACE) \
@@ -499,3 +505,59 @@ flux-bootstrap: check-tools gitea-create-admin gitea-create-flux-repo gitea-add-
 	  --path=$(FLUX_CLUSTER_PATH) \
 	  --private-key-file=$(FLUX_SSH_KEY) \
 	  --silent
+
+.PHONY: gitea-create-bng-repo
+gitea-create-bng-repo:
+	@echo "--> GITEA: Ensuring repo $(FLUX_BNG_REPO) exists"
+	@$(CURL) --resolve gitea.nok.local:80:172.18.0.100 \
+	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
+	  http://$(GITEA_HOST)/api/v1/repos/$(GITEA_ADMIN_USER)/$(FLUX_BNG_REPO) \
+	  >/dev/null || \
+	$(CURL) --resolve gitea.nok.local:80:172.18.0.100 \
+	  -X POST \
+	  -H "Content-Type: application/json" \
+	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
+	  -d '{"name":"$(FLUX_BNG_REPO)", "description": "BNG resources for Network Observability and Conf Management","private":false,"auto_init":true}' \
+	  http://$(GITEA_HOST)/api/v1/user/repos
+
+.PHONY: flux-create-bng-secret
+flux-create-bng-secret:
+	@echo "--> FLUX: Ensuring Git secret $(FLUX_BNG_SECRET) exists"
+	@if ! $(KUBECTL) get secret $(FLUX_BNG_SECRET) -n flux-system > /dev/null 2>&1; then \
+		echo "Creating Git secret $(FLUX_BNG_SECRET)..."; \
+		$(FLUX) create secret git $(FLUX_BNG_SECRET) \
+		  --url=ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_BNG_REPO).git \
+		  --ssh-key-algorithm=ed25519 \
+		  --private-key-file=$(FLUX_SSH_KEY) \
+		  --namespace=flux-system; \
+	else \
+		echo "Git secret $(FLUX_BNG_SECRET) already exists."; \
+	fi
+
+.PHONY: flux-create-bng-source
+flux-create-bng-source:
+	@echo "--> FLUX: Ensuring GitRepository source $(FLUX_BNG_REPO) exists"
+	@if ! $(KUBECTL) get gitrepository $(FLUX_BNG_REPO) -n flux-system > /dev/null 2>&1; then \
+		echo "Creating GitRepository source $(FLUX_BNG_REPO)..."; \
+		$(FLUX) create source git $(FLUX_BNG_REPO) \
+		  --url=ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_BNG_REPO).git \
+		  --branch=$(FLUX_GIT_BRANCH) \
+		  --secret-ref=$(FLUX_BNG_SECRET) \
+		  --interval=1m \
+		  --namespace=flux-system; \
+	else \
+		echo "GitRepository source $(FLUX_BNG_REPO) already exists."; \
+	fi	  
+
+.PHONY: push-bng-manifests
+push-bng-manifests:
+	@echo "--> GIT: Preparing and pushing BNG manifests to $(FLUX_BNG_REPO)"
+	@if [ ! -d "$(BNG_MANIFESTS_DIR)/.git" ]; then \
+		echo "Initializing Git repository in $(BNG_MANIFESTS_DIR)..."; \
+		(cd $(BNG_MANIFESTS_DIR) && git init); \
+		(cd $(BNG_MANIFESTS_DIR) && git remote add origin $(BNG_REPO_URL) 2>/dev/null || git remote set-url origin $(BNG_REPO_URL)); \
+	fi
+	@echo "Adding and committing files in $(BNG_MANIFESTS_DIR)..."
+	(cd $(BNG_MANIFESTS_DIR) && git add .); \
+	(cd $(BNG_MANIFESTS_DIR) && git commit -m "Automated commit of BNG manifests" || true); \
+	(cd $(BNG_MANIFESTS_DIR) && git push -u origin $(FLUX_GIT_BRANCH) || git push origin $(FLUX_GIT_BRANCH));
