@@ -144,12 +144,16 @@ endef
 .PHONY: try-nok
 try-nok: check-tools cluster-up git-clone-kpt git-clone-clab install-base-pkg install-lb-pkg install-prom-oper install-gnmic-oper start-ingress-port-forward
 
-.PHONY: deploy-bng
-deploy-bng: try-nok install-bng-pkg  destroy-clab-bng deploy-clab-bng
+.PHONY: try-nok-bng 
+try-nok-bng: try-nok install-bng-pkg install-git-pkg  gitops-init gitops-bng-kustomization
 
 .PHONY: gitops-init
-gitops-init: flux-bootstrap
+gitops-init: gitea-create-admin gitea-create-flux-repo gitea-add-ssh-key  flux-bootstrap
 	@echo "--> GITOPS: Cluster is now managed by Flux"
+
+.PHONY: gitops-bng-kustomization
+gitops-bng-kustomization: gitea-create-bng-repo flux-create-bng-secret flux-create-bng-source push-bng-manifests create-bng-kustomizations
+	@echo "--> GITOPS: BNG repo in sync by Flux"
 
 .PHONY: cluster-up
 cluster-up: $(KIND_CONFIG_REAL_LOC) ## Bring up the KinD cluster
@@ -381,7 +385,7 @@ start-ingress-port-forward: ## Starts background port-forward for ingress-nginx-
 	@echo "    To stop it, find the process using 'ps aux | grep \"kubectl port-forward\"' and 'kill <PID>'."
 
 .PHONY: install-base-pkg
-install-base-pkg: check-tools git-clone-kpt ## Installs the base kpt package from ./nok-kpt/nok-base
+install-base-pkg: ## Installs the base kpt package from ./nok-kpt/nok-base
 	@$(call INSTALL_KPT_PACKAGE,$(NOK_KPT_DIR)/nok-base,nok-base,"--reconcile-timeout=5m", "--inventory-policy=adopt")	
 
 .PHONY: wait-for-metallb-ready
@@ -470,14 +474,27 @@ gitea-create-flux-repo:
 	  -d '{"name":"$(FLUX_GIT_REPO)","private":false,"auto_init":true}' \
 	  http://$(GITEA_HOST)/api/v1/user/repos
 
+
 .PHONY: gitea-add-ssh-key
 gitea-add-ssh-key:
-	@echo "--> GITEA: Ensuring SSH key is registered"
-	@if [ ! -f "$(FLUX_SSH_KEY).pub" ]; then \
-		echo "[ERROR] SSH public key not found: $(FLUX_SSH_KEY).pub"; \
-		exit 1; \
-	fi
-	@SSH_KEY="$$(cat $(FLUX_SSH_KEY).pub)" ;\
+	@set -e; \
+	echo "--> GITEA: Ensuring SSH key is registered"; \
+	\
+	if [ ! -f "$(FLUX_SSH_KEY).pub" ]; then \
+		echo "--> GITEA: SSH key not found, generating new ed25519 key at $(FLUX_SSH_KEY)"; \
+		ssh-keygen -t ed25519 -f "$(FLUX_SSH_KEY)" -N "" -q; \
+	else \
+		echo "--> GITEA: SSH key found at $(FLUX_SSH_KEY).pub"; \
+	fi; \
+	\
+	if ssh-keygen -F "$(GITEA_SSH_HOST)" >/dev/null 2>&1; then \
+		echo "--> GITEA: Removing $(GITEA_SSH_HOST) from ~/.ssh/known_hosts"; \
+		ssh-keygen -R "$(GITEA_SSH_HOST)" >/dev/null; \
+	else \
+		echo "--> GITEA: $(GITEA_SSH_HOST) not found in ~/.ssh/known_hosts, skipping removal"; \
+	fi; \
+	\
+	SSH_KEY="$$(cat "$(FLUX_SSH_KEY).pub")"; \
 	if $(CURL) -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
 	     http://$(GITEA_HOST)/api/v1/user/keys | \
 	     jq -r '.[].key' | grep -Fxq "$$SSH_KEY"; then \
@@ -488,8 +505,16 @@ gitea-add-ssh-key:
 		  -H "Content-Type: application/json" \
 		  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
 		  -d "{\"title\":\"flux ssh key\",\"key\":\"$$SSH_KEY\"}" \
-		  http://$(GITEA_HOST)/api/v1/user/keys ;\
-	fi
+		  http://$(GITEA_HOST)/api/v1/user/keys; \
+	fi; \
+	\
+	echo "--> GITEA: Ensuring $(GITEA_SSH_HOST) is in ~/.ssh/known_hosts"; \
+	if ! ssh-keygen -F "$(GITEA_SSH_HOST)" >/dev/null 2>&1; then \
+		ssh-keyscan -H "$(GITEA_SSH_HOST)" >> ~/.ssh/known_hosts 2>/dev/null; \
+	fi; \
+	\
+	echo "--> GITEA: Verifying SSH authentication (non-fatal)"; \
+	ssh -T -o BatchMode=yes -o ConnectTimeout=5 git@"$(GITEA_SSH_HOST)" || true
 
 .PHONY: flux-bootstrap
 flux-bootstrap: check-tools gitea-create-admin gitea-create-flux-repo gitea-add-ssh-key
@@ -551,13 +576,38 @@ flux-create-bng-source:
 
 .PHONY: push-bng-manifests
 push-bng-manifests:
-	@echo "--> GIT: Preparing and pushing BNG manifests to $(FLUX_BNG_REPO)"
-	@if [ ! -d "$(BNG_MANIFESTS_DIR)/.git" ]; then \
-		echo "Initializing Git repository in $(BNG_MANIFESTS_DIR)..."; \
-		(cd $(BNG_MANIFESTS_DIR) && git init); \
-		(cd $(BNG_MANIFESTS_DIR) && git remote add origin $(BNG_REPO_URL) 2>/dev/null || git remote set-url origin $(BNG_REPO_URL)); \
-	fi
-	@echo "Adding and committing files in $(BNG_MANIFESTS_DIR)..."
-	(cd $(BNG_MANIFESTS_DIR) && git add .); \
-	(cd $(BNG_MANIFESTS_DIR) && git commit -m "Automated commit of BNG manifests" || true); \
-	(cd $(BNG_MANIFESTS_DIR) && git push -u origin $(FLUX_GIT_BRANCH) || git push origin $(FLUX_GIT_BRANCH));
+	@echo "--> GIT: Forcing full snapshot push of BNG manifests to $(FLUX_BNG_REPO)"
+
+	@cd $(BNG_MANIFESTS_DIR) && \
+		( \
+			rm -rf .git && \
+			git init -b $(FLUX_GIT_BRANCH) && \
+			git remote add origin $(BNG_REPO_URL) && \
+			git add -A && \
+			git commit --allow-empty -m "Authoritative snapshot of BNG manifests" && \
+			git push --force origin $(FLUX_GIT_BRANCH) \
+		)
+
+	@echo "--> GIT: Full snapshot push completed"
+
+.PHONY: create-bng-kustomizations
+create-bng-kustomizations:
+	@echo "--> FLUX: Ensuring Kustomizations for BNG manifests exist"
+	@for d in $(BNG_MANIFESTS_DIR)/*/; do \
+		n=$$(basename "$$d"); \
+		if [ "$$n" != ".git" ]; then \
+			echo "Checking Kustomization for $$n..."; \
+			if $(FLUX) get kustomization "$$n" -n flux-system 2>&1 | grep -q "not found"; then \
+				echo "Creating Kustomization for $$n..."; \
+				$(FLUX) create kustomization "$$n" \
+				  --source=GitRepository/$(FLUX_BNG_REPO) \
+				  --path="./$$n" \
+				  --prune=true \
+				  --interval=1m \
+				  --timeout=1m \
+				  --namespace=flux-system; \
+			else \
+				echo "Kustomization for $$n already exists."; \
+			fi \
+		fi \
+	done	
