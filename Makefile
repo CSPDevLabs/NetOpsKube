@@ -462,12 +462,34 @@ gitea-create-admin:
 
 .PHONY: gitea-create-flux-repo
 gitea-create-flux-repo:
+	@echo "--> GITEA: Waiting for API to become available (max 3 minutes)"
+	@set -e; \
+	timeout=180; \
+	while [ $$timeout -gt 0 ]; do \
+		if $(CURL) --silent --fail \
+			--resolve gitea.nok.local:80:172.18.0.100 \
+			-u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
+			http://$(GITEA_HOST)/api/v1/user/repos \
+			>/dev/null; then \
+			echo "--> GITEA: API is available"; \
+			break; \
+		fi; \
+		timeout=$$((timeout - 5)); \
+		sleep 5; \
+	done; \
+	if [ $$timeout -le 0 ]; then \
+		echo "ERROR: Gitea API not available after 3 minutes"; \
+		exit 1; \
+	fi
+
 	@echo "--> GITEA: Ensuring repo $(FLUX_GIT_REPO) exists"
-	@$(CURL) --resolve gitea.nok.local:80:172.18.0.100 \
+	@$(CURL) --silent --fail \
+	  --resolve gitea.nok.local:80:172.18.0.100 \
 	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
 	  http://$(GITEA_HOST)/api/v1/repos/$(GITEA_ADMIN_USER)/$(FLUX_GIT_REPO) \
 	  >/dev/null || \
-	$(CURL) --resolve gitea.nok.local:80:172.18.0.100 \
+	$(CURL) --silent --fail \
+	  --resolve gitea.nok.local:80:172.18.0.100 \
 	  -X POST \
 	  -H "Content-Type: application/json" \
 	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
