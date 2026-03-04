@@ -1,4 +1,4 @@
 Flask
 requests
 kubernetes
-python-consul
+ping3

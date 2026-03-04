@@ -35,7 +35,8 @@ HELM ?= $(TOOLS)/helm
 KPT ?= $(TOOLS)/kpt
 K9S ?= $(TOOLS)/k9s
 GH ?= $(TOOLS)/gh
-CLAB ?= $(TOOLS)/clab # Added containerlab alias
+CLAB ?= $(TOOLS)/clab
+FLUX ?= $(TOOLS)/flux
 
 # --- Git Repository Configuration ---
 SRLINUX_IMAGE ?= registry.srlinux.dev/pub/nokia_srsim:25.10.R1
@@ -62,6 +63,7 @@ KUBECTL_VERSION ?= v1.33.1
 K9S_VERSION ?= v0.32.4
 YQ_VERSION ?= v4.42.1
 CLAB_VERSION ?= 0.72.0
+FLUX_VERSION ?= 2.3.0
 
 ### Tool Locations
 ### ---------------------------------------------------------------------------|
@@ -72,6 +74,7 @@ KPT_SRC ?= https://github.com/GoogleContainerTools/kpt/releases/download/$(KPT_V
 K9S_SRC ?= https://github.com/derailed/k9s/releases/download/$(K9S_VERSION)/k9s_$(UNAME)_$(ARCH).tar.gz
 YQ_SRC ?= https://github.com/mikefarah/yq/releases/download/$(YQ_VERSION)/yq_$(OS)_$(ARCH)
 CLAB_SRC ?= https://github.com/srl-labs/containerlab/releases/download/v$(CLAB_VERSION)/containerlab_$(CLAB_VERSION)_$(OS)_$(ARCH).tar.gz
+FLUX_SRC ?= https://github.com/fluxcd/flux2/releases/download/v$(FLUX_VERSION)/flux_$(FLUX_VERSION)_$(OS)_$(ARCH).tar.gz
 
 # GH_SRC needs special handling for OS/ARCH mapping
 ifeq ($(OS),darwin)
@@ -83,7 +86,32 @@ else
 endif
 GH_SRC ?= https://github.com/cli/cli/releases/download/v$(GH_VERSION)/gh_$(GH_VERSION)_$(GH_OS_ARCH).$(GH_EXT)
 
-DOWNLOAD_TOOLS_LIST := $(KIND) $(KUBECTL) $(HELM) $(KPT) $(K9S) $(YQ) $(GH) $(CLAB) # Added CLAB
+DOWNLOAD_TOOLS_LIST := $(KIND) $(KUBECTL) $(HELM) $(KPT) $(K9S) $(YQ) $(GH) $(CLAB) $(FLUX)
+
+# --- Flux & Gitea GitOps Configuration ---
+GITEA_NAMESPACE ?= nok-git
+GITEA_HOST ?= gitea.nok.local
+GITEA_IP ?= 172.18.0.100
+GITEA_SSH_HOST ?= 172.18.0.102
+GITEA_ADMIN_USER ?= nok
+GITEA_ADMIN_PASS ?= N0kP4ssw0rd
+GITEA_ADMIN_EMAIL ?= nok@example.com
+
+FLUX_GIT_REPO ?= flux-bootstrap
+FLUX_BNG_REPO ?= nok-bng-resources
+FLUX_BNG_SECRET ?= nok-bng-auth
+FLUX_GIT_BRANCH ?= main
+FLUX_CLUSTER_PATH ?= clusters/NetOpsKube
+FLUX_SSH_KEY ?= $(HOME)/.ssh/id_ed25519
+
+BNG_MANIFESTS_DIR := ./nok-clabs/nok-bng/nok-manifests
+BNG_REPO_URL := ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_BNG_REPO).git
+
+define GET_GITEA_POD
+$(shell $(KUBECTL) get pods -n $(GITEA_NAMESPACE) \
+  -l app.kubernetes.io/name=gitea \
+  -o jsonpath='{.items[0].metadata.name}')
+endef
 
 # --- Macros for tool downloading ---
 define download-bin
@@ -116,8 +144,16 @@ endef
 .PHONY: try-nok
 try-nok: check-tools cluster-up git-clone-kpt git-clone-clab install-base-pkg install-lb-pkg install-prom-oper install-gnmic-oper start-ingress-port-forward
 
-.PHONY: deploy-bng
-deploy-bng: try-nok install-bng-pkg  destroy-clab-bng deploy-clab-bng
+.PHONY: try-nok-bng 
+try-nok-bng: try-nok install-bng-pkg install-git-pkg  gitops-init gitops-bng-kustomization
+
+.PHONY: gitops-init
+gitops-init: gitea-create-admin gitea-create-flux-repo gitea-add-ssh-key  flux-bootstrap
+	@echo "--> GITOPS: Cluster is now managed by Flux"
+
+.PHONY: gitops-bng-kustomization
+gitops-bng-kustomization: gitea-create-bng-repo flux-create-bng-secret flux-create-bng-source push-bng-manifests create-bng-kustomizations
+	@echo "--> GITOPS: BNG repo in sync by Flux"
 
 .PHONY: cluster-up
 cluster-up: $(KIND_CONFIG_REAL_LOC) ## Bring up the KinD cluster
@@ -165,7 +201,7 @@ delete-cluster: ## Delete the KinD cluster
 	@rm -f $(KIND_LAUNCH_CONFIG)
 
 .PHONY: check-tools
-check-tools: $(KIND) $(KUBECTL) $(YQ) $(HELM) $(KPT) $(K9S) $(GH) $(CLAB) create-tool-aliases ## Ensure all required tools are present and aliased
+check-tools: $(KIND) $(KUBECTL) $(YQ) $(HELM) $(KPT) $(K9S) $(GH) $(CLAB) $(FLUX) create-tool-aliases ## Ensure all required tools are present and aliased
 	@echo "--> All required tools found or downloaded."
 
 .PHONY: create-tool-aliases
@@ -219,6 +255,15 @@ $(CLAB): | $(BASE) $(TOOLS) ; $(info --> TOOLS: Ensuring containerlab is present
 		chmod a+x $(CLAB) ;\
 		rm -rf $$TEMP_DIR ;\
 	fi
+$(FLUX): | $(BASE) $(TOOLS) ; $(info --> TOOLS: Ensuring flux is present in $(FLUX))
+	@if test ! -f $(FLUX); then \
+		echo "    Downloading $(FLUX_SRC)..." ;\
+		TEMP_DIR=$$(mktemp -d) ;\
+		$(CURL) -L --output - $(FLUX_SRC) | tar -xz -C $$TEMP_DIR >/dev/null ;\
+		mv $$TEMP_DIR/flux $(FLUX) ;\
+		chmod a+x $(FLUX) ;\
+		rm -rf $$TEMP_DIR ;\
+	fi	
 
 # --- Git Clone Targets ---
 .PHONY: git-clone-kpt
@@ -340,7 +385,7 @@ start-ingress-port-forward: ## Starts background port-forward for ingress-nginx-
 	@echo "    To stop it, find the process using 'ps aux | grep \"kubectl port-forward\"' and 'kill <PID>'."
 
 .PHONY: install-base-pkg
-install-base-pkg: check-tools git-clone-kpt ## Installs the base kpt package from ./nok-kpt/nok-base
+install-base-pkg: ## Installs the base kpt package from ./nok-kpt/nok-base
 	@$(call INSTALL_KPT_PACKAGE,$(NOK_KPT_DIR)/nok-base,nok-base,"--reconcile-timeout=5m", "--inventory-policy=adopt")	
 
 .PHONY: wait-for-metallb-ready
@@ -394,3 +439,175 @@ install-gnmic-oper: $(KUBECTL) ## Installs the Prometheus Operator manifest
 	@echo -e "--> INSTALL: [\033[1;34mPrometheus Operator\033[0m] - Applying manifest..."
 	@$(KUBECTL) create -f ./nok-kpt/nok-base-gnmic-oper/install.yaml
 	@echo -e "--> INSTALL: [\033[0;32mPrometheus Operator\033[0m] - Manifest applied successfully."
+
+.PHONY: gitea-create-admin
+gitea-create-admin:
+	@echo "--> GITEA: Ensuring admin user exists"
+	@POD="$(call GET_GITEA_POD)" ;\
+	if [ -z "$$POD" ]; then \
+		echo "[ERROR] Gitea pod not found" ; exit 1 ;\
+	fi ;\
+	if $(KUBECTL) exec -n $(GITEA_NAMESPACE) $$POD -- \
+	     curl -sf http://localhost:3000/api/v1/users/$(GITEA_ADMIN_USER) >/dev/null; then \
+		echo "--> GITEA: User $(GITEA_ADMIN_USER) already exists, skipping"; \
+	else \
+		echo "--> GITEA: Creating admin user $(GITEA_ADMIN_USER)"; \
+		$(KUBECTL) exec -n $(GITEA_NAMESPACE) $$POD -- \
+		  gitea admin user create \
+		    --username $(GITEA_ADMIN_USER) \
+		    --password "$(GITEA_ADMIN_PASS)" \
+		    --email "$(GITEA_ADMIN_EMAIL)" \
+		    --must-change-password=false ;\
+	fi
+
+.PHONY: gitea-create-flux-repo
+gitea-create-flux-repo:
+	@echo "--> GITEA: Ensuring repo $(FLUX_GIT_REPO) exists"
+	@$(CURL) --resolve gitea.nok.local:80:172.18.0.100 \
+	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
+	  http://$(GITEA_HOST)/api/v1/repos/$(GITEA_ADMIN_USER)/$(FLUX_GIT_REPO) \
+	  >/dev/null || \
+	$(CURL) --resolve gitea.nok.local:80:172.18.0.100 \
+	  -X POST \
+	  -H "Content-Type: application/json" \
+	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
+	  -d '{"name":"$(FLUX_GIT_REPO)","private":false,"auto_init":true}' \
+	  http://$(GITEA_HOST)/api/v1/user/repos
+
+
+.PHONY: gitea-add-ssh-key
+gitea-add-ssh-key:
+	@set -e; \
+	echo "--> GITEA: Ensuring SSH key is registered"; \
+	\
+	if [ ! -f "$(FLUX_SSH_KEY).pub" ]; then \
+		echo "--> GITEA: SSH key not found, generating new ed25519 key at $(FLUX_SSH_KEY)"; \
+		ssh-keygen -t ed25519 -f "$(FLUX_SSH_KEY)" -N "" -q; \
+	else \
+		echo "--> GITEA: SSH key found at $(FLUX_SSH_KEY).pub"; \
+	fi; \
+	\
+	if ssh-keygen -F "$(GITEA_SSH_HOST)" >/dev/null 2>&1; then \
+		echo "--> GITEA: Removing $(GITEA_SSH_HOST) from ~/.ssh/known_hosts"; \
+		ssh-keygen -R "$(GITEA_SSH_HOST)" >/dev/null; \
+	else \
+		echo "--> GITEA: $(GITEA_SSH_HOST) not found in ~/.ssh/known_hosts, skipping removal"; \
+	fi; \
+	\
+	SSH_KEY="$$(cat "$(FLUX_SSH_KEY).pub")"; \
+	if $(CURL) -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
+	     http://$(GITEA_HOST)/api/v1/user/keys | \
+	     jq -r '.[].key' | grep -Fxq "$$SSH_KEY"; then \
+		echo "--> GITEA: SSH key already registered, skipping"; \
+	else \
+		echo "--> GITEA: Registering SSH key"; \
+		$(CURL) -X POST \
+		  -H "Content-Type: application/json" \
+		  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
+		  -d "{\"title\":\"flux ssh key\",\"key\":\"$$SSH_KEY\"}" \
+		  http://$(GITEA_HOST)/api/v1/user/keys; \
+	fi; \
+	\
+	echo "--> GITEA: Ensuring $(GITEA_SSH_HOST) is in ~/.ssh/known_hosts"; \
+	if ! ssh-keygen -F "$(GITEA_SSH_HOST)" >/dev/null 2>&1; then \
+		ssh-keyscan -H "$(GITEA_SSH_HOST)" >> ~/.ssh/known_hosts 2>/dev/null; \
+	fi; \
+	\
+	echo "--> GITEA: Verifying SSH authentication (non-fatal)"; \
+	ssh -T -o BatchMode=yes -o ConnectTimeout=5 git@"$(GITEA_SSH_HOST)" || true
+
+.PHONY: flux-bootstrap
+flux-bootstrap: check-tools gitea-create-admin gitea-create-flux-repo gitea-add-ssh-key
+	@echo "--> GITEA: Ensuring repository $(FLUX_GIT_REPO) exists"
+	@$(CURL) --resolve gitea.nok.local:80:172.18.0.100 -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
+	  http://$(GITEA_HOST)/api/v1/repos/$(GITEA_ADMIN_USER)/$(FLUX_GIT_REPO) \
+	  >/dev/null || \
+	@echo "--> FLUX: Bootstrapping cluster"
+	@$(FLUX) check --pre
+	@$(FLUX) bootstrap git \
+	  --url=ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_GIT_REPO).git \
+	  --branch=$(FLUX_GIT_BRANCH) \
+	  --path=$(FLUX_CLUSTER_PATH) \
+	  --private-key-file=$(FLUX_SSH_KEY) \
+	  --silent
+
+.PHONY: gitea-create-bng-repo
+gitea-create-bng-repo:
+	@echo "--> GITEA: Ensuring repo $(FLUX_BNG_REPO) exists"
+	@$(CURL) --resolve gitea.nok.local:80:172.18.0.100 \
+	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
+	  http://$(GITEA_HOST)/api/v1/repos/$(GITEA_ADMIN_USER)/$(FLUX_BNG_REPO) \
+	  >/dev/null || \
+	$(CURL) --resolve gitea.nok.local:80:172.18.0.100 \
+	  -X POST \
+	  -H "Content-Type: application/json" \
+	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
+	  -d '{"name":"$(FLUX_BNG_REPO)", "description": "BNG resources for Network Observability and Conf Management","private":false,"auto_init":true}' \
+	  http://$(GITEA_HOST)/api/v1/user/repos
+
+.PHONY: flux-create-bng-secret
+flux-create-bng-secret:
+	@echo "--> FLUX: Ensuring Git secret $(FLUX_BNG_SECRET) exists"
+	@if ! $(KUBECTL) get secret $(FLUX_BNG_SECRET) -n flux-system > /dev/null 2>&1; then \
+		echo "Creating Git secret $(FLUX_BNG_SECRET)..."; \
+		$(FLUX) create secret git $(FLUX_BNG_SECRET) \
+		  --url=ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_BNG_REPO).git \
+		  --ssh-key-algorithm=ed25519 \
+		  --private-key-file=$(FLUX_SSH_KEY) \
+		  --namespace=flux-system; \
+	else \
+		echo "Git secret $(FLUX_BNG_SECRET) already exists."; \
+	fi
+
+.PHONY: flux-create-bng-source
+flux-create-bng-source:
+	@echo "--> FLUX: Ensuring GitRepository source $(FLUX_BNG_REPO) exists"
+	@if ! $(KUBECTL) get gitrepository $(FLUX_BNG_REPO) -n flux-system > /dev/null 2>&1; then \
+		echo "Creating GitRepository source $(FLUX_BNG_REPO)..."; \
+		$(FLUX) create source git $(FLUX_BNG_REPO) \
+		  --url=ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_BNG_REPO).git \
+		  --branch=$(FLUX_GIT_BRANCH) \
+		  --secret-ref=$(FLUX_BNG_SECRET) \
+		  --interval=1m \
+		  --namespace=flux-system; \
+	else \
+		echo "GitRepository source $(FLUX_BNG_REPO) already exists."; \
+	fi	  
+
+.PHONY: push-bng-manifests
+push-bng-manifests:
+	@echo "--> GIT: Forcing full snapshot push of BNG manifests to $(FLUX_BNG_REPO)"
+
+	@cd $(BNG_MANIFESTS_DIR) && \
+		( \
+			rm -rf .git && \
+			git init -b $(FLUX_GIT_BRANCH) && \
+			git remote add origin $(BNG_REPO_URL) && \
+			git add -A && \
+			git commit --allow-empty -m "Authoritative snapshot of BNG manifests" && \
+			git push --force origin $(FLUX_GIT_BRANCH) \
+		)
+
+	@echo "--> GIT: Full snapshot push completed"
+
+.PHONY: create-bng-kustomizations
+create-bng-kustomizations:
+	@echo "--> FLUX: Ensuring Kustomizations for BNG manifests exist"
+	@for d in $(BNG_MANIFESTS_DIR)/*/; do \
+		n=$$(basename "$$d"); \
+		if [ "$$n" != ".git" ]; then \
+			echo "Checking Kustomization for $$n..."; \
+			if $(FLUX) get kustomization "$$n" -n flux-system 2>&1 | grep -q "not found"; then \
+				echo "Creating Kustomization for $$n..."; \
+				$(FLUX) create kustomization "$$n" \
+				  --source=GitRepository/$(FLUX_BNG_REPO) \
+				  --path="./$$n" \
+				  --prune=true \
+				  --interval=1m \
+				  --timeout=1m \
+				  --namespace=flux-system; \
+			else \
+				echo "Kustomization for $$n already exists."; \
+			fi \
+		fi \
+	done	
