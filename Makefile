@@ -102,7 +102,7 @@ FLUX_BNG_REPO ?= nok-bng-resources
 FLUX_BNG_SECRET ?= nok-bng-auth
 FLUX_GIT_BRANCH ?= main
 FLUX_CLUSTER_PATH ?= clusters/NetOpsKube
-FLUX_SSH_KEY ?= $(HOME)/.ssh/id_ed25519
+FLUX_SSH_KEY ?= $(HOME)/.ssh/flux_ed25519 # Using dedicated key for Flux to avoid conflicts with other SSH key encrypted with passphrase.
 
 BNG_MANIFESTS_DIR := ./nok-clabs/nok-bng/nok-manifests
 BNG_REPO_URL := ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_BNG_REPO).git
@@ -141,14 +141,31 @@ define INSTALL_KPT_PACKAGE
 	}
 endef
 
+# The same as INSTALL_KPT_PACKAGE, but also runs kpt fn render to apply setters.
+define INSTALL_KPT_PACKAGE_WITH_SETTERS
+	{	\
+		echo -e "--> INSTALL: [\033[1;34m$2\033[0m] - Applying kpt package"									;\
+		pushd $1 &>/dev/null || (echo "[ERROR]: Failed to switch cwd to $2" && exit 1)						;\
+		if [[ ! -f resourcegroup.yaml ]] || [[ $(KPT_LIVE_INIT_FORCE) -eq 1 ]]; then						 \
+			$(KPT) live init --force 2>&1 | $(INDENT_OUT)													;\
+		else																								 \
+			echo -e "--> INSTALL: [\033[1;34m$2\033[0m] - Resource group found, don't re-init this package"	;\
+		fi																									;\
+		$(KPT) fn render 2>&1 | $(INDENT_OUT)																;\
+		$(KPT) live apply $3 $4 2>&1 | $(INDENT_OUT)                                                   		;\
+		popd &>/dev/null || (echo "[ERROR]: Failed to switch back from $2" && exit 1)						;\
+		echo -e "--> INSTALL: [\033[0;32m$2\033[0m] - Applied and reconciled package"						;\
+	}
+endef
+
 .PHONY: try-nok
-try-nok: check-tools cluster-up git-clone-kpt git-clone-clab install-base-pkg install-lb-pkg install-prom-oper install-gnmic-oper start-ingress-port-forward
+try-nok: check-tools cluster-up git-clone-kpt git-clone-clab install-base-pkg install-lb-pkg install-prom-oper install-gnmic-oper start-ingress-port-forward ## Deploy Base Apps, clone kpt and clab repos, install base packages / load balancer / prometheus and gnmic operators, port forward
 
 .PHONY: try-nok-bng 
-try-nok-bng: try-nok install-bng-pkg install-git-pkg  gitops-init gitops-bng-kustomization
+try-nok-bng: try-nok install-bng-pkg install-git-pkg  gitops-init gitops-bng-kustomization ## Deploy BNG and GitOps
 
 .PHONY: gitops-init
-gitops-init: gitea-create-admin gitea-create-flux-repo gitea-add-ssh-key  flux-bootstrap
+gitops-init: gitea-create-admin gitea-create-flux-repo gitea-add-ssh-key  flux-bootstrap ## Create Gitea admin, create Flux repo, add SSH key, bootstrap Flux
 	@echo "--> GITOPS: Cluster is now managed by Flux"
 
 .PHONY: gitops-bng-kustomization
@@ -388,6 +405,11 @@ start-ingress-port-forward: ## Starts background port-forward for ingress-nginx-
 install-base-pkg: ## Installs the base kpt package from ./nok-kpt/nok-base
 	@$(call INSTALL_KPT_PACKAGE,$(NOK_KPT_DIR)/nok-base,nok-base,"--reconcile-timeout=5m", "--inventory-policy=adopt")	
 
+.PHONY: install-bbm-pkg
+install-bbm-pkg: ## Installs the BBM (self-monitotoring and observability) kpt package from ./nok-kpt/nok-bbm
+	@echo "--> INSTALL: [\033[1;34mBBM\033[0m] - Applying kpt package with setters"
+	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-bbm,nok-bbm,"--reconcile-timeout=5m", "--inventory-policy=adopt")	
+
 .PHONY: wait-for-metallb-ready
 wait-for-metallb-ready: ## Wait for the Kubernetes Metallb node to be ready
 	@echo "--> KIND: Waiting for Metallb Controller to be ready"
@@ -517,13 +539,14 @@ gitea-add-ssh-key:
 	fi; \
 	\
 	SSH_KEY="$$(cat "$(FLUX_SSH_KEY).pub")"; \
-	if $(CURL) -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
+	if $(CURL) --resolve gitea.nok.local:80:172.18.0.100 \
+	     -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
 	     http://$(GITEA_HOST)/api/v1/user/keys | \
 	     jq -r '.[].key' | grep -Fxq "$$SSH_KEY"; then \
 		echo "--> GITEA: SSH key already registered, skipping"; \
 	else \
 		echo "--> GITEA: Registering SSH key"; \
-		$(CURL) -X POST \
+		$(CURL) --resolve gitea.nok.local:80:172.18.0.100 -X POST \
 		  -H "Content-Type: application/json" \
 		  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
 		  -d "{\"title\":\"flux ssh key\",\"key\":\"$$SSH_KEY\"}" \
@@ -545,6 +568,8 @@ flux-bootstrap: check-tools gitea-create-admin gitea-create-flux-repo gitea-add-
 	  http://$(GITEA_HOST)/api/v1/repos/$(GITEA_ADMIN_USER)/$(FLUX_GIT_REPO) \
 	  >/dev/null || \
 	@echo "--> FLUX: Bootstrapping cluster"
+	@echo "--> SSH: Loading key into agent (prompts once if passphrase-protected)"
+	@ssh-add $(FLUX_SSH_KEY)
 	@$(FLUX) check --pre
 	@$(FLUX) bootstrap git \
 	  --url=ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_GIT_REPO).git \
