@@ -102,7 +102,7 @@ FLUX_BNG_REPO ?= nok-bng-resources
 FLUX_BNG_SECRET ?= nok-bng-auth
 FLUX_GIT_BRANCH ?= main
 FLUX_CLUSTER_PATH ?= clusters/NetOpsKube
-FLUX_SSH_KEY ?= $(HOME)/.ssh/flux_ed25519 # Using dedicated key for Flux to avoid conflicts with other SSH key encrypted with passphrase.
+FLUX_SSH_KEY ?= $(HOME)/.ssh/flux_ed25519
 
 BNG_MANIFESTS_DIR := ./nok-clabs/nok-bng/nok-manifests
 BNG_REPO_URL := ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_BNG_REPO).git
@@ -489,7 +489,7 @@ gitea-create-flux-repo:
 	timeout=180; \
 	while [ $$timeout -gt 0 ]; do \
 		if $(CURL) --silent --fail \
-			--resolve gitea.nok.local:80:172.18.0.100 \
+			--resolve $(GITEA_HOST):80:$(GITEA_IP) \
 			-u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
 			http://$(GITEA_HOST)/api/v1/user/repos \
 			>/dev/null; then \
@@ -506,12 +506,12 @@ gitea-create-flux-repo:
 
 	@echo "--> GITEA: Ensuring repo $(FLUX_GIT_REPO) exists"
 	@$(CURL) --silent --fail \
-	  --resolve gitea.nok.local:80:172.18.0.100 \
+	  --resolve $(GITEA_HOST):80:$(GITEA_IP) \
 	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
 	  http://$(GITEA_HOST)/api/v1/repos/$(GITEA_ADMIN_USER)/$(FLUX_GIT_REPO) \
 	  >/dev/null || \
 	$(CURL) --silent --fail \
-	  --resolve gitea.nok.local:80:172.18.0.100 \
+	  --resolve $(GITEA_HOST):80:$(GITEA_IP) \
 	  -X POST \
 	  -H "Content-Type: application/json" \
 	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
@@ -538,15 +538,16 @@ gitea-add-ssh-key:
 		echo "--> GITEA: $(GITEA_SSH_HOST) not found in ~/.ssh/known_hosts, skipping removal"; \
 	fi; \
 	\
-	SSH_KEY="$$(cat "$(FLUX_SSH_KEY).pub")"; \
-	if $(CURL) --resolve gitea.nok.local:80:172.18.0.100 \
+	SSH_KEY="$$(cat $(FLUX_SSH_KEY).pub)"; \
+	echo "--> SSH: Using Public Key: $$SSH_KEY"; \
+	if $(CURL) --resolve $(GITEA_HOST):80:172.18.0.100 \
 	     -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
 	     http://$(GITEA_HOST)/api/v1/user/keys | \
 	     jq -r '.[].key' | grep -Fxq "$$SSH_KEY"; then \
 		echo "--> GITEA: SSH key already registered, skipping"; \
 	else \
 		echo "--> GITEA: Registering SSH key"; \
-		$(CURL) --resolve gitea.nok.local:80:172.18.0.100 -X POST \
+		$(CURL) --resolve $(GITEA_HOST):80:172.18.0.100 -X POST \
 		  -H "Content-Type: application/json" \
 		  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
 		  -d "{\"title\":\"flux ssh key\",\"key\":\"$$SSH_KEY\"}" \
@@ -559,33 +560,39 @@ gitea-add-ssh-key:
 	fi; \
 	\
 	echo "--> GITEA: Verifying SSH authentication (non-fatal)"; \
-	ssh -T -o BatchMode=yes -o ConnectTimeout=5 git@"$(GITEA_SSH_HOST)" || true
+	ssh -T -i "$(FLUX_SSH_KEY)" -o BatchMode=yes -o ConnectTimeout=5 git@"$(GITEA_SSH_HOST)" || true
 
 .PHONY: flux-bootstrap
 flux-bootstrap: check-tools gitea-create-admin gitea-create-flux-repo gitea-add-ssh-key
 	@echo "--> GITEA: Ensuring repository $(FLUX_GIT_REPO) exists"
-	@$(CURL) --resolve gitea.nok.local:80:172.18.0.100 -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
+	@$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
 	  http://$(GITEA_HOST)/api/v1/repos/$(GITEA_ADMIN_USER)/$(FLUX_GIT_REPO) \
 	  >/dev/null || \
 	@echo "--> FLUX: Bootstrapping cluster"
+
 	@echo "--> SSH: Loading key into agent (prompts once if passphrase-protected)"
-	@ssh-add $(FLUX_SSH_KEY)
+	@SSH_KEY="$$(cat "$(FLUX_SSH_KEY).pub")"; \
+	echo "--> SSH: Using Public Key: $$SSH_KEY";
+
 	@$(FLUX) check --pre
+
 	@$(FLUX) bootstrap git \
 	  --url=ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_GIT_REPO).git \
 	  --branch=$(FLUX_GIT_BRANCH) \
 	  --path=$(FLUX_CLUSTER_PATH) \
 	  --private-key-file=$(FLUX_SSH_KEY) \
-	  --silent
+	  --ssh-key-algorithm=ed25519 \
+	  --silent \
+	  --verbose
 
 .PHONY: gitea-create-bng-repo
 gitea-create-bng-repo:
 	@echo "--> GITEA: Ensuring repo $(FLUX_BNG_REPO) exists"
-	@$(CURL) --resolve gitea.nok.local:80:172.18.0.100 \
+	@$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) \
 	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
 	  http://$(GITEA_HOST)/api/v1/repos/$(GITEA_ADMIN_USER)/$(FLUX_BNG_REPO) \
 	  >/dev/null || \
-	$(CURL) --resolve gitea.nok.local:80:172.18.0.100 \
+	$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) \
 	  -X POST \
 	  -H "Content-Type: application/json" \
 	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
@@ -632,6 +639,7 @@ push-bng-manifests:
 			git remote add origin $(BNG_REPO_URL) && \
 			git add -A && \
 			git commit --allow-empty -m "Authoritative snapshot of BNG manifests" && \
+			git config core.sshCommand 'ssh -o IdentitiesOnly=yes -i $(FLUX_SSH_KEY)' && \
 			git push --force origin $(FLUX_GIT_BRANCH) \
 		)
 
