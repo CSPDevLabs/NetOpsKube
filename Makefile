@@ -89,7 +89,7 @@ GH_SRC ?= https://github.com/cli/cli/releases/download/v$(GH_VERSION)/gh_$(GH_VE
 DOWNLOAD_TOOLS_LIST := $(KIND) $(KUBECTL) $(HELM) $(KPT) $(K9S) $(YQ) $(GH) $(CLAB) $(FLUX)
 
 # --- Flux & Gitea GitOps Configuration ---
-GITEA_NAMESPACE ?= nok-git
+GITOPS_NAMESPACE ?= nok-git
 GITEA_HOST ?= gitea.nok.local
 GITEA_IP ?= 172.18.0.100
 GITEA_SSH_HOST ?= 172.18.0.102
@@ -108,7 +108,7 @@ BNG_MANIFESTS_DIR := ./nok-clabs/nok-bng/nok-manifests
 BNG_REPO_URL := ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_BNG_REPO).git
 
 define GET_GITEA_POD
-$(shell $(KUBECTL) get pods -n $(GITEA_NAMESPACE) \
+$(shell $(KUBECTL) get pods -n $(GITOPS_NAMESPACE) \
   -l app.kubernetes.io/name=gitea \
   -o jsonpath='{.items[0].metadata.name}')
 endef
@@ -469,12 +469,12 @@ gitea-create-admin:
 	if [ -z "$$POD" ]; then \
 		echo "[ERROR] Gitea pod not found" ; exit 1 ;\
 	fi ;\
-	if $(KUBECTL) exec -n $(GITEA_NAMESPACE) $$POD -- \
+	if $(KUBECTL) exec -n $(GITOPS_NAMESPACE) $$POD -- \
 	     curl -sf http://localhost:3000/api/v1/users/$(GITEA_ADMIN_USER) >/dev/null; then \
 		echo "--> GITEA: User $(GITEA_ADMIN_USER) already exists, skipping"; \
 	else \
 		echo "--> GITEA: Creating admin user $(GITEA_ADMIN_USER)"; \
-		$(KUBECTL) exec -n $(GITEA_NAMESPACE) $$POD -- \
+		$(KUBECTL) exec -n $(GITOPS_NAMESPACE) $$POD -- \
 		  gitea admin user create \
 		    --username $(GITEA_ADMIN_USER) \
 		    --password "$(GITEA_ADMIN_PASS)" \
