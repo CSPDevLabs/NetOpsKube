@@ -159,10 +159,10 @@ define INSTALL_KPT_PACKAGE_WITH_SETTERS
 endef
 
 .PHONY: try-nok
-try-nok: check-tools cluster-up git-clone-kpt git-clone-clab install-base-pkg install-lb-pkg install-prom-oper install-gnmic-oper start-ingress-port-forward ## Deploy Base Apps, clone kpt and clab repos, install base packages / load balancer / prometheus and gnmic operators, port forward
+try-nok: check-tools cluster-up git-clone-kpt git-clone-clab install-base-pkg install-lb-pkg install-prom-oper install-gnmic-oper start-ingress-port-forward install-bbm-pkg ## Deploy Base Apps, clone kpt and clab repos, install base packages / load balancer / prometheus and gnmic operators, port forward
 
 .PHONY: try-nok-bng 
-try-nok-bng: try-nok install-bng-pkg install-git-pkg  gitops-init gitops-bng-kustomization ## Deploy BNG and GitOps
+try-nok-bng: try-nok install-bng-pkg install-git-pkg  gitops-init gitops-bng-kustomization install-bbm-pkg ## Deploy BNG and GitOps
 
 .PHONY: gitops-init
 gitops-init: gitea-create-admin gitea-create-flux-repo gitea-add-ssh-key  flux-bootstrap ## Create Gitea admin, create Flux repo, add SSH key, bootstrap Flux
