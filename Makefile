@@ -162,7 +162,7 @@ endef
 try-nok: check-tools cluster-up git-clone-kpt git-clone-clab install-base-pkg install-lb-pkg install-prom-oper install-gnmic-oper start-ingress-port-forward ## Deploy Base Apps, clone kpt and clab repos, install base packages / load balancer / prometheus and gnmic operators, port forward
 
 .PHONY: try-nok-bng 
-try-nok-bng: try-nok install-bng-pkg install-git-pkg  gitops-init gitops-bng-kustomization ## Deploy BNG and GitOps
+try-nok-bng: try-nok install-bng-pkg install-git-pkg  gitops-init gitops-bng-kustomization install-bng-ndt-metrics ## Deploy BNG and GitOps
 
 .PHONY: gitops-init
 gitops-init: gitea-create-admin gitea-create-flux-repo gitea-add-ssh-key  flux-bootstrap ## Create Gitea admin, create Flux repo, add SSH key, bootstrap Flux
@@ -448,19 +448,19 @@ install-prom-oper: $(KUBECTL) ## Installs the Prometheus Operator manifest
 	@echo -e "--> INSTALL: [\033[0;32mPrometheus Operator\033[0m] - Manifest applied successfully."
 
 .PHONY: install-gnmic-oper
-install-gnmic-oper: $(KUBECTL) ## Installs the Prometheus Operator manifest
+install-gnmic-oper: $(KUBECTL) ## Installs the GNMIc Operator manifest
 	@echo -e "--> INSTALL: [\033[1;34mGNMIc Operator\033[0m] - Checking prerequisites..."
 	@if ! $(KUBECTL) version --client &>/dev/null; then \
 		echo "[ERROR]: kubectl is not working or not configured. Please ensure your kubeconfig is set." >&2; \
 		exit 1; \
 	fi
 	@if [ ! -f "./nok-kpt/nok-base-gnmic-oper/install.yaml" ]; then \
-		echo "[ERROR]: Prometheus Operator manifest not found at ./nok-kpt/nok-base-gnmic-oper/install.yaml" >&2; \
+		echo "[ERROR]: GNMIc Operator manifest not found at ./nok-kpt/nok-base-gnmic-oper/install.yaml" >&2; \
 		exit 1; \
 	fi
-	@echo -e "--> INSTALL: [\033[1;34mPrometheus Operator\033[0m] - Applying manifest..."
+	@echo -e "--> INSTALL: [\033[1;34mGNMIc Operator\033[0m] - Applying manifest..."
 	@$(KUBECTL) create -f ./nok-kpt/nok-base-gnmic-oper/install.yaml
-	@echo -e "--> INSTALL: [\033[0;32mPrometheus Operator\033[0m] - Manifest applied successfully."
+	@echo -e "--> INSTALL: [\033[0;32mGNMIc Operator\033[0m] - Manifest applied successfully."
 
 .PHONY: gitea-create-admin
 gitea-create-admin:
@@ -666,3 +666,19 @@ create-bng-kustomizations:
 			fi \
 		fi \
 	done	
+
+.PHONY: install-bng-ndt-metrics
+install-bng-ndt-metrics: $(KUBECTL) 
+	@echo -e "--> INSTALL: [\033[1;34mNetwork Device Target Metrics\033[0m] - Checking prerequisites..."
+	@if ! $(KUBECTL) version --client &>/dev/null; then \
+		echo "[ERROR]: kubectl is not working or not configured. Please ensure your kubeconfig is set." >&2; \
+		exit 1; \
+	fi
+	@if [ ! -f "./nok-kpt/nok-bng-ndt-metrics/netdevtarget-metrics-deploy.yaml" ]; then \
+		echo "[ERROR]: Network Device Target Metrics manifest not found at ./nok-kpt/nok-bng-ndt-metrics/netdevtarget-metrics-deploy.yaml" >&2; \
+		exit 1; \
+	fi
+	@echo -e "--> INSTALL: [\033[1;34mNetwork Device Target Metrics\033[0m] - Applying manifest..."
+	@$(KUBECTL) apply -f ./nok-kpt/nok-bng-ndt-metrics/netdevtarget-metrics-deploy.yaml
+	@$(KUBECTL) apply -f ./nok-kpt/nok-bng-ndt-metrics/service-monitor.yaml
+	@echo -e "--> INSTALL: [\033[0;32mNetwork Device Target Metrics\033[0m] - Manifest applied successfully."
