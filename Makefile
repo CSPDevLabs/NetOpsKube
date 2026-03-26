@@ -454,19 +454,19 @@ install-prom-oper: $(KUBECTL) ## Installs the Prometheus Operator manifest
 	@echo -e "--> INSTALL: [\033[0;32mPrometheus Operator\033[0m] - Manifest applied successfully."
 
 .PHONY: install-gnmic-oper
-install-gnmic-oper: $(KUBECTL) ## Installs the Prometheus Operator manifest
+install-gnmic-oper: $(KUBECTL) ## Installs the GNMIc Operator manifest
 	@echo -e "--> INSTALL: [\033[1;34mGNMIc Operator\033[0m] - Checking prerequisites..."
 	@if ! $(KUBECTL) version --client &>/dev/null; then \
 		echo "[ERROR]: kubectl is not working or not configured. Please ensure your kubeconfig is set." >&2; \
 		exit 1; \
 	fi
 	@if [ ! -f "./nok-kpt/nok-base-gnmic-oper/install.yaml" ]; then \
-		echo "[ERROR]: Prometheus Operator manifest not found at ./nok-kpt/nok-base-gnmic-oper/install.yaml" >&2; \
+		echo "[ERROR]: GNMIc Operator manifest not found at ./nok-kpt/nok-base-gnmic-oper/install.yaml" >&2; \
 		exit 1; \
 	fi
-	@echo -e "--> INSTALL: [\033[1;34mPrometheus Operator\033[0m] - Applying manifest..."
+	@echo -e "--> INSTALL: [\033[1;34mGNMIc Operator\033[0m] - Applying manifest..."
 	@$(KUBECTL) create -f ./nok-kpt/nok-base-gnmic-oper/install.yaml
-	@echo -e "--> INSTALL: [\033[0;32mPrometheus Operator\033[0m] - Manifest applied successfully."
+	@echo -e "--> INSTALL: [\033[0;32mGNMIc Operator\033[0m] - Manifest applied successfully."
 
 .PHONY: gitea-create-admin
 gitea-create-admin:
