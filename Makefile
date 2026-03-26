@@ -38,6 +38,12 @@ GH ?= $(TOOLS)/gh
 CLAB ?= $(TOOLS)/clab
 FLUX ?= $(TOOLS)/flux
 
+
+# Optional proxy settings for docker build
+HTTP_PROXY ?=
+HTTPS_PROXY ?=
+NO_PROXY ?= localhost,127.0.0.1,.cluster.local,10.0.0.0/8
+
 # --- Git Repository Configuration ---
 SRLINUX_IMAGE ?= registry.srlinux.dev/pub/nokia_srsim:25.10.R1
 SRSIM_LICENSE_FILE ?= $(NOK_CLABS_DIR)/nok-bng/srsim-lic-25.txt
@@ -159,10 +165,10 @@ define INSTALL_KPT_PACKAGE_WITH_SETTERS
 endef
 
 .PHONY: try-nok
-try-nok: check-tools cluster-up git-clone-kpt git-clone-clab install-base-pkg install-lb-pkg install-prom-oper install-gnmic-oper start-ingress-port-forward ## Deploy Base Apps, clone kpt and clab repos, install base packages / load balancer / prometheus and gnmic operators, port forward
+try-nok: check-tools cluster-up git-clone-kpt git-clone-clab install-base-pkg install-lb-pkg install-prom-oper install-gnmic-oper start-ingress-port-forward install-bbm-pkg ## Deploy Base Apps, clone kpt and clab repos, install base packages / load balancer / prometheus and gnmic operators, port forward
 
-.PHONY: try-nok-bng 
-try-nok-bng: try-nok install-bng-pkg install-git-pkg  gitops-init gitops-bng-kustomization ## Deploy BNG and GitOps
+.PHONY: try-nok-bng
+try-nok-bng: try-nok install-bng-pkg install-git-pkg configure-auth configure-auth-ingress gitops-init gitops-bng-kustomization install-bbm-pkg ## Deploy BNG and GitOps
 
 .PHONY: gitops-init
 gitops-init: gitea-create-admin gitea-create-flux-repo gitea-add-ssh-key  flux-bootstrap ## Create Gitea admin, create Flux repo, add SSH key, bootstrap Flux
@@ -667,4 +673,46 @@ create-bng-kustomizations:
 		fi \
 	done	
 
+PORTAL_DIR ?= $(NOK_KPT_DIR)/nok-bng/portal
 
+.PHONY: configure-auth
+configure-auth:
+	@echo "--> AUTH: Building flask-auth-service image"
+	@$(KUBECTL) apply -f $(PORTAL_DIR)/portal-auth-secret.yaml
+	@BUILD_ARGS=""
+	@if [ -n "$(HTTP_PROXY)" ]; then BUILD_ARGS="$$BUILD_ARGS --build-arg HTTP_PROXY=$(HTTP_PROXY)"; fi; \
+	if [ -n "$(HTTPS_PROXY)" ]; then BUILD_ARGS="$$BUILD_ARGS --build-arg HTTPS_PROXY=$(HTTPS_PROXY)"; fi; \
+	if [ -n "$(NO_PROXY)" ]; then BUILD_ARGS="$$BUILD_ARGS --build-arg NO_PROXY=$(NO_PROXY)"; fi; \
+	cd $(PORTAL_DIR) && docker build $$BUILD_ARGS -t flask-auth-service .
+
+	@echo "--> AUTH: Loading image into Kind cluster"
+	@$(KIND) load docker-image flask-auth-service --name $(KIND_CLUSTER_NAME)
+
+	@echo "--> AUTH: Applying Kubernetes manifests"
+	@$(KUBECTL) apply -f $(PORTAL_DIR)/portal-auth-svc.yaml
+	@$(KUBECTL) apply -f $(PORTAL_DIR)/portal-auth-deploy.yaml
+	@$(KUBECTL) apply -f $(PORTAL_DIR)/portal-ingress.yaml
+
+	@echo "--> AUTH: Deployment completed"
+
+AUTH_SIGNIN ?= http://bng.nok.local:8080/login?rd=$$$$request_uri
+AUTH_URL ?= http://portal-auth.nok-bng.svc.cluster.local/auth
+
+.PHONY: configure-auth-ingress
+configure-auth-ingress: ## Add authentication annotations to ingresses
+
+	@echo "--> AUTH: Adding auth annotations to nok-apps-ingress"
+	@$(KUBECTL) annotate ingress nok-apps-ingress \
+	-n nok-bng \
+	nginx.ingress.kubernetes.io/auth-signin="$(AUTH_SIGNIN)" \
+	nginx.ingress.kubernetes.io/auth-url="$(AUTH_URL)" \
+	--overwrite
+
+	@echo "--> AUTH: Adding auth annotations to nok-apps-portal-ingress"
+	@$(KUBECTL) annotate ingress nok-apps-portal-ingress \
+	-n nok-bng \
+	nginx.ingress.kubernetes.io/auth-signin="$(AUTH_SIGNIN)" \
+	nginx.ingress.kubernetes.io/auth-url="$(AUTH_URL)" \
+	--overwrite
+
+	@echo "--> AUTH: Ingress authentication annotations applied"
