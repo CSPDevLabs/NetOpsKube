@@ -1,4 +1,0 @@
-Flask
-requests
-kubernetes
-ping3
