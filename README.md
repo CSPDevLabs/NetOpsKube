@@ -89,3 +89,25 @@ BNG use case can be tested locally via:
 ```bash
 curl --resolve bng.nok.local:8080:127.0.0.1 http://bng.nok.local:8080
 ```
+
+### Proxy Configuration
+In environments where outbound internet access is restricted, you may need to configure HTTP/HTTPS proxy settings for certain workloads.
+ 
+Proxy values can be configured in the Makefile by updating the following variables:
+```bash
+HTTP_PROXY  ?= http://<proxy-ip>:<port>
+HTTPS_PROXY ?= http://<proxy-ip>:<port>
+NO_PROXY    ?= 127.0.0.1,localhost,::1,.svc,.cluster.local,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,10.96.0.0/12,10.244.0.0/16,.nok.local,gitea.nok.local
+```
+
+#### Apply Proxy to Deployments
+Run the following command to apply proxy environment variables to required deployments.
+```bash
+make set-proxy-env
+```
+
+#### Remove / Rollback Proxy
+If incorrect proxy values are applied, you can remove them using below command.
+```bash
+make unset-proxy-env
+```

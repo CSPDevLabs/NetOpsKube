@@ -21,3 +21,7 @@ nodes:
       - |
         kind: KubeletConfiguration
         streamingConnectionIdleTimeout: "96h0m0s"
+    extraMounts:
+      - hostPath: /etc/environment
+        containerPath: /etc/environment
+        readOnly: true
