@@ -39,10 +39,10 @@ CLAB ?= $(TOOLS)/clab
 FLUX ?= $(TOOLS)/flux
 
 
-# Optional proxy settings for docker build
+# Optional proxy settings
 HTTP_PROXY ?=
 HTTPS_PROXY ?=
-NO_PROXY ?= localhost,127.0.0.1,.cluster.local,10.0.0.0/8
+NO_PROXY ?= 127.0.0.1,localhost,::1,.svc,.cluster.local,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,10.96.0.0/12,10.244.0.0/16,.nok.local,gitea.nok.local
 
 # --- Git Repository Configuration ---
 SRLINUX_IMAGE ?= registry.srlinux.dev/pub/nokia_srsim:25.10.R1
@@ -716,3 +716,96 @@ configure-auth-ingress: ## Add authentication annotations to ingresses
 	--overwrite
 
 	@echo "--> AUTH: Ingress authentication annotations applied"
+
+
+.PHONY: update-portal-auth
+update-portal-auth:
+	@echo "--> AUTH: Verifying current credentials"; \
+	read -p "Enter current username: " CUR_USER; \
+	read -s -p "Enter current password: " CUR_PASS; echo ""; \
+	\
+	REAL_USER=$$(kubectl get secret portal-auth-secret -n nok-bng -o jsonpath='{.data.username}' | base64 -d); \
+	REAL_PASS=$$(kubectl get secret portal-auth-secret -n nok-bng -o jsonpath='{.data.password}' | base64 -d); \
+	\
+	if [ "$$CUR_USER" != "$$REAL_USER" ] || [ "$$CUR_PASS" != "$$REAL_PASS" ]; then \
+		echo "Incorrect current credentials"; \
+		exit 1; \
+	fi; \
+	\
+	echo "--> AUTH: Enter new credentials"; \
+	read -p "New username: " NEW_USER; \
+	read -s -p "New password: " NEW_PASS; echo ""; \
+	\
+	if [ -z "$$NEW_USER" ] || [ -z "$$NEW_PASS" ]; then \
+		echo "Username or password cannot be empty"; \
+		exit 1; \
+	fi; \
+	\
+	kubectl create secret generic portal-auth-secret \
+		-n nok-bng \
+		--from-literal=username="$$NEW_USER" \
+		--from-literal=password="$$NEW_PASS" \
+		--dry-run=client -o yaml | kubectl apply -f -; \
+	\
+	echo "--> AUTH: Restarting auth deployment"; \
+	kubectl rollout restart deployment portal-auth -n nok-bng; \
+	\
+	echo "Credentials updated successfully"
+
+
+PROXY_DEPLOYMENTS := \
+nok-bbm:bbm-grafana \
+nok-bbm:coredns-updater \
+nok-bng:grafana-deployment \
+nok-base:grafana-operator-controller-manager
+
+
+.PHONY: set-proxy-env
+set-proxy-env:
+        @echo "--> PROXY: Applying proxy env to deployments"
+        @for item in $(PROXY_DEPLOYMENTS); do \
+                NS=$$(echo $$item | cut -d: -f1); \
+                DEP=$$(echo $$item | cut -d: -f2); \
+                echo "Updating $$DEP in namespace $$NS"; \
+                \
+                $(KUBECTL) set env deployment $$DEP \
+                        HTTP_PROXY="$(HTTP_PROXY)" \
+                        HTTPS_PROXY="$(HTTPS_PROXY)" \
+                        NO_PROXY="$(NO_PROXY)" \
+                        http_proxy="$(HTTP_PROXY)" \
+                        https_proxy="$(HTTPS_PROXY)" \
+                        no_proxy="$(NO_PROXY)" \
+                        -n $$NS --overwrite; \
+                \
+                echo "--> Restarting $$DEP"; \
+                $(KUBECTL) rollout restart deployment $$DEP -n $$NS; \
+                \
+                echo "--> Waiting for rollout to complete"; \
+                $(KUBECTL) rollout status deployment $$DEP -n $$NS --timeout=180s; \
+        done
+
+
+.PHONY: unset-proxy-env
+unset-proxy-env:
+        @echo "--> PROXY: Removing proxy env from deployments"
+        @for item in $(PROXY_DEPLOYMENTS); do \
+                NS=$$(echo $$item | cut -d: -f1); \
+                DEP=$$(echo $$item | cut -d: -f2); \
+                echo "Cleaning $$DEP in namespace $$NS"; \
+                $(KUBECTL) set env deployment $$DEP \
+                        HTTP_PROXY- HTTPS_PROXY- NO_PROXY- \
+                        http_proxy- https_proxy- no_proxy- \
+                        -n $$NS; \
+                echo "Rolling out restart for $$DEP"; \
+                $(KUBECTL) rollout restart deployment $$DEP -n $$NS; \
+        done
+
+
+.PHONY: backup-deployments
+backup-deployments:
+        @mkdir -p backup
+        @for item in $(PROXY_DEPLOYMENTS); do \
+                NS=$$(echo $$item | cut -d: -f1); \
+                DEP=$$(echo $$item | cut -d: -f2); \
+                $(KUBECTL) get deployment $$DEP -n $$NS -o yaml > backup/$$NS-$$DEP.yaml; \
+        done
