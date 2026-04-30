@@ -718,6 +718,41 @@ configure-auth-ingress: ## Add authentication annotations to ingresses
 	@echo "--> AUTH: Ingress authentication annotations applied"
 
 
+.PHONY: update-portal-auth
+update-portal-auth:
+	@echo "--> AUTH: Verifying current credentials"; \
+	read -p "Enter current username: " CUR_USER; \
+	read -s -p "Enter current password: " CUR_PASS; echo ""; \
+	\
+	REAL_USER=$$(kubectl get secret portal-auth-secret -n nok-bng -o jsonpath='{.data.username}' | base64 -d); \
+	REAL_PASS=$$(kubectl get secret portal-auth-secret -n nok-bng -o jsonpath='{.data.password}' | base64 -d); \
+	\
+	if [ "$$CUR_USER" != "$$REAL_USER" ] || [ "$$CUR_PASS" != "$$REAL_PASS" ]; then \
+		echo "Incorrect current credentials"; \
+		exit 1; \
+	fi; \
+	\
+	echo "--> AUTH: Enter new credentials"; \
+	read -p "New username: " NEW_USER; \
+	read -s -p "New password: " NEW_PASS; echo ""; \
+	\
+	if [ -z "$$NEW_USER" ] || [ -z "$$NEW_PASS" ]; then \
+		echo "Username or password cannot be empty"; \
+		exit 1; \
+	fi; \
+	\
+	kubectl create secret generic portal-auth-secret \
+		-n nok-bng \
+		--from-literal=username="$$NEW_USER" \
+		--from-literal=password="$$NEW_PASS" \
+		--dry-run=client -o yaml | kubectl apply -f -; \
+	\
+	echo "--> AUTH: Restarting auth deployment"; \
+	kubectl rollout restart deployment portal-auth -n nok-bng; \
+	\
+	echo "Credentials updated successfully"
+
+
 PROXY_DEPLOYMENTS := \
 nok-bbm:bbm-grafana \
 nok-bbm:coredns-updater \

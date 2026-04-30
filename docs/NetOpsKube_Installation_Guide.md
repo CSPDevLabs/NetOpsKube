@@ -293,7 +293,13 @@ make delete-cluster
 make destroy-clab-bng
 ```
 
-##  Verify whether all pods are in 'Running'state.
+### Update portal username/password
+Update NOK portal credentials using below command.
+```bash
+make update-portal-auth
+```
+
+##  Verify whether all pods are in 'Running' state.
 
 ```bash
 ubuntu@nokia:~/kube_project/NetOpsKube$ kubectl get pods -A
