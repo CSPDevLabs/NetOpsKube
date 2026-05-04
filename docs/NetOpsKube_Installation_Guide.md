@@ -355,6 +355,12 @@ nok-git              gitea-valkey-primary-0                                 1/1 
 ubuntu@nokia:~/kube_project/NetOpsKube$
 ```
 
+## Generate BNG subscribe sessions and traffic
+Run below command.
+```bash
+sudo docker exec -it clab-sros-bngt-bngblaster bash -c 'bngblaster -C pppoe.json -I -l dhcp'
+ ```
+
 ## Open portal
 Add entries for "bng.nok.local" and "gitea.nok.local" in the /etc/hosts file of your local machine (e.g., your Windows laptop), mapping them to the IP address of the Ubuntu host. This allows your browser to resolve the URLs correctly.
 
