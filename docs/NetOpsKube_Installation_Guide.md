@@ -71,8 +71,8 @@ Configure http_proxy, https_proxy, and no_proxy environment variables. Update be
    HTTP_PROXY="http://<proxy-ip>:<port>"
    HTTPS_PROXY="http://<proxy-ip>:<port>"
    FTP_PROXY="http://<proxy-ip>:<port>"
-   no_proxy="127.0.0.1,localhost,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,10.96.0.0/12,10.244.0.0/16,gitea.nok.local,*.nok.local"
-   NO_PROXY="127.0.0.1,localhost,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,10.96.0.0/12,10.244.0.0/16,gitea.nok.local,*.nok.local"
+   no_proxy="127.0.0.1,localhost,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,10.96.0.0/12,10.244.0.0/16,gitea.nok.local,.nok.local,.svc,.svc.cluster.local,bbm-grafana-svc,bbm-grafana-svc.nok-bbm,bbm-grafana-svc.nok-bbm.svc,bbm-grafana-svc.nok-bbm.svc.cluster.local,bbm-prometheus-svc,bbm-prometheus-svc.nok-bbm,bbm-prometheus-svc.nok-bbm.svc,bbm-prometheus-svc.nok-bbm.svc.cluster.local"
+   NO_PROXY="127.0.0.1,localhost,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,10.96.0.0/12,10.244.0.0/16,gitea.nok.local,.nok.local,.svc,.svc.cluster.local,bbm-grafana-svc,bbm-grafana-svc.nok-bbm,bbm-grafana-svc.nok-bbm.svc,bbm-grafana-svc.nok-bbm.svc.cluster.local,bbm-prometheus-svc,bbm-prometheus-svc.nok-bbm,bbm-prometheus-svc.nok-bbm.svc,bbm-prometheus-svc.nok-bbm.svc.cluster.local"
    ubuntu@nokia:~/kube_project/NetOpsKube$
    ```
 
@@ -84,8 +84,8 @@ Configure http_proxy, https_proxy, and no_proxy environment variables. Update be
    export HTTP_PROXY="http://<proxy-ip>:<port>"
    export HTTPS_PROXY="http://<proxy-ip>:<port>"
    export FTP_PROXY="http://<proxy-ip>:<port>"
-   export no_proxy="127.0.0.1,localhost,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,10.96.0.0/12,10.244.0.0/16,gitea.nok.local,*.nok.local"
-   export NO_PROXY="127.0.0.1,localhost,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,10.96.0.0/12,10.244.0.0/16,gitea.nok.local,*.nok.local"
+   export no_proxy="127.0.0.1,localhost,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,10.96.0.0/12,10.244.0.0/16,gitea.nok.local,.nok.local,.svc,.svc.cluster.local,bbm-grafana-svc,bbm-grafana-svc.nok-bbm,bbm-grafana-svc.nok-bbm.svc,bbm-grafana-svc.nok-bbm.svc.cluster.local,bbm-prometheus-svc,bbm-prometheus-svc.nok-bbm,bbm-prometheus-svc.nok-bbm.svc,bbm-prometheus-svc.nok-bbm.svc.cluster.local"
+   export NO_PROXY="127.0.0.1,localhost,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,10.96.0.0/12,10.244.0.0/16,gitea.nok.local,.nok.local,.svc,.svc.cluster.local,bbm-grafana-svc,bbm-grafana-svc.nok-bbm,bbm-grafana-svc.nok-bbm.svc,bbm-grafana-svc.nok-bbm.svc.cluster.local,bbm-prometheus-svc,bbm-prometheus-svc.nok-bbm,bbm-prometheus-svc.nok-bbm.svc,bbm-prometheus-svc.nok-bbm.svc.cluster.local"
    ubuntu@nokia:~/kube_project/NetOpsKube$
    ```
 
@@ -117,7 +117,7 @@ Ensure proxy settings are properly configured in the respective package manager 
       Environment="HTTP_PROXY=http://<proxy-ip>:<port>"
       Environment="HTTPS_PROXY=http://<proxy-ip>:<port>"
       Environment="FTP_PROXY=http://<proxy-ip>:<port>"
-      Environment="NO_PROXY=127.0.0.1,localhost,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,10.96.0.0/12,10.244.0.0/16,gitea.nok.local,*.nok.local"
+      Environment="NO_PROXY=127.0.0.1,localhost,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,10.96.0.0/12,10.244.0.0/16,gitea.nok.local,.nok.local,.svc,.svc.cluster.local,bbm-grafana-svc,bbm-grafana-svc.nok-bbm,bbm-grafana-svc.nok-bbm.svc,bbm-grafana-svc.nok-bbm.svc.cluster.local,bbm-prometheus-svc,bbm-prometheus-svc.nok-bbm,bbm-prometheus-svc.nok-bbm.svc,bbm-prometheus-svc.nok-bbm.svc.cluster.local"
       ubuntu@nokia:~/kube_project/NetOpsKube$
       ```
    - Restart Docker after configuration.
@@ -279,12 +279,14 @@ Run the following command to apply proxy environment variables to required deplo
 ```bash
 make set-proxy-env
 ```
+Wait for some time till all pods are up and running.
 
 ### Remove / Rollback Proxy
 If incorrect proxy values are applied, you can remove them using below command.
 ```bash
 make unset-proxy-env
 ```
+Wait for some time till all pods are up and running.
 
 ### Delete cluster
 Delete the full setup using below commands.
