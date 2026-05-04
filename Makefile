@@ -42,7 +42,7 @@ FLUX ?= $(TOOLS)/flux
 # Optional proxy settings
 HTTP_PROXY ?=
 HTTPS_PROXY ?=
-NO_PROXY ?= 127.0.0.1,localhost,::1,.svc,.cluster.local,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,10.96.0.0/12,10.244.0.0/16,.nok.local,gitea.nok.local
+NO_PROXY ?= 127.0.0.1,localhost,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,10.96.0.0/12,10.244.0.0/16,gitea.nok.local,.nok.local,.svc,.svc.cluster.local,bbm-grafana-svc,bbm-grafana-svc.nok-bbm,bbm-grafana-svc.nok-bbm.svc,bbm-grafana-svc.nok-bbm.svc.cluster.local,bbm-prometheus-svc,bbm-prometheus-svc.nok-bbm,bbm-prometheus-svc.nok-bbm.svc,bbm-prometheus-svc.nok-bbm.svc.cluster.local
 
 # --- Git Repository Configuration ---
 SRLINUX_IMAGE ?= registry.srlinux.dev/pub/nokia_srsim:25.10.R1
@@ -757,55 +757,57 @@ PROXY_DEPLOYMENTS := \
 nok-bbm:bbm-grafana \
 nok-bbm:coredns-updater \
 nok-bng:grafana-deployment \
+nok-bbm:bbm-prometheus-deployment \
+nok-bbm:kube-state-metrics \
+nok-bbm:blackbox-exporter \
 nok-base:grafana-operator-controller-manager
-
 
 .PHONY: set-proxy-env
 set-proxy-env:
-        @echo "--> PROXY: Applying proxy env to deployments"
-        @for item in $(PROXY_DEPLOYMENTS); do \
-                NS=$$(echo $$item | cut -d: -f1); \
-                DEP=$$(echo $$item | cut -d: -f2); \
-                echo "Updating $$DEP in namespace $$NS"; \
-                \
-                $(KUBECTL) set env deployment $$DEP \
-                        HTTP_PROXY="$(HTTP_PROXY)" \
-                        HTTPS_PROXY="$(HTTPS_PROXY)" \
-                        NO_PROXY="$(NO_PROXY)" \
-                        http_proxy="$(HTTP_PROXY)" \
-                        https_proxy="$(HTTPS_PROXY)" \
-                        no_proxy="$(NO_PROXY)" \
-                        -n $$NS --overwrite; \
-                \
-                echo "--> Restarting $$DEP"; \
-                $(KUBECTL) rollout restart deployment $$DEP -n $$NS; \
-                \
-                echo "--> Waiting for rollout to complete"; \
-                $(KUBECTL) rollout status deployment $$DEP -n $$NS --timeout=180s; \
-        done
+	@echo "--> PROXY: Applying proxy env to deployments"
+	@for item in $(PROXY_DEPLOYMENTS); do \
+		NS=$$(echo $$item | cut -d: -f1); \
+		DEP=$$(echo $$item | cut -d: -f2); \
+		echo "Updating $$DEP in namespace $$NS"; \
+		\
+		$(KUBECTL) set env deployment $$DEP \
+			HTTP_PROXY="$(HTTP_PROXY)" \
+			HTTPS_PROXY="$(HTTPS_PROXY)" \
+			NO_PROXY="$(NO_PROXY)" \
+			http_proxy="$(HTTP_PROXY)" \
+			https_proxy="$(HTTPS_PROXY)" \
+			no_proxy="$(NO_PROXY)" \
+			-n $$NS --overwrite; \
+		\
+		echo "--> Restarting $$DEP"; \
+		$(KUBECTL) rollout restart deployment $$DEP -n $$NS; \
+		\
+		echo "--> Waiting for rollout to complete"; \
+		$(KUBECTL) rollout status deployment $$DEP -n $$NS --timeout=120s; \
+	done
 
 
 .PHONY: unset-proxy-env
 unset-proxy-env:
-        @echo "--> PROXY: Removing proxy env from deployments"
-        @for item in $(PROXY_DEPLOYMENTS); do \
-                NS=$$(echo $$item | cut -d: -f1); \
-                DEP=$$(echo $$item | cut -d: -f2); \
-                echo "Cleaning $$DEP in namespace $$NS"; \
-                $(KUBECTL) set env deployment $$DEP \
-                        HTTP_PROXY- HTTPS_PROXY- NO_PROXY- \
-                        http_proxy- https_proxy- no_proxy- \
-                        -n $$NS; \
-                echo "Rolling out restart for $$DEP"; \
-                $(KUBECTL) rollout restart deployment $$DEP -n $$NS; \
-        done
+	@echo "--> PROXY: Removing proxy env from deployments"
+	@for item in $(PROXY_DEPLOYMENTS); do \
+		NS=$$(echo $$item | cut -d: -f1); \
+		DEP=$$(echo $$item | cut -d: -f2); \
+		echo "Cleaning $$DEP in namespace $$NS"; \
+		$(KUBECTL) set env deployment $$DEP \
+			HTTP_PROXY- HTTPS_PROXY- NO_PROXY- \
+			http_proxy- https_proxy- no_proxy- \
+			-n $$NS; \
+		echo "Rolling out restart for $$DEP"; \
+		$(KUBECTL) rollout restart deployment $$DEP -n $$NS; \
+	done
 
 
 .PHONY: backup-deployments
 backup-deployments:
-        @mkdir -p backup
-        @for item in $(PROXY_DEPLOYMENTS); do \
-                NS=$$(echo $$item | cut -d: -f1); \
-                DEP=$$(echo $$item | cut -d: -f2); \
-                $(KUBECTL) get deployment $$DEP -n $$NS -o yaml > backup/$$NS-$$DEP.yaml; \
-        done
+	@mkdir -p backup
+	@for item in $(PROXY_DEPLOYMENTS); do \
+		NS=$$(echo $$item | cut -d: -f1); \
+		DEP=$$(echo $$item | cut -d: -f2); \
+		$(KUBECTL) get deployment $$DEP -n $$NS -o yaml > backup/$$NS-$$DEP.yaml; \
+	done
