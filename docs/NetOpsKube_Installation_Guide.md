@@ -355,7 +355,7 @@ nok-git              gitea-valkey-primary-0                                 1/1 
 ubuntu@nokia:~/kube_project/NetOpsKube$
 ```
 
-## Generate BNG subscribe sessions and traffic
+## Generate BNG subscriber sessions and traffic
 Run below command.
 ```bash
 sudo docker exec -it clab-sros-bngt-bngblaster bash -c 'bngblaster -C pppoe.json -I -l dhcp'
