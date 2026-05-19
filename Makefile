@@ -42,7 +42,7 @@ FLUX ?= $(TOOLS)/flux
 # Optional proxy settings
 HTTP_PROXY ?=
 HTTPS_PROXY ?=
-NO_PROXY ?= 127.0.0.1,localhost,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,10.96.0.0/12,10.244.0.0/16,gitea.nok.local,.nok.local,.svc,.svc.cluster.local,bbm-grafana-svc,bbm-grafana-svc.nok-bbm,bbm-grafana-svc.nok-bbm.svc,bbm-grafana-svc.nok-bbm.svc.cluster.local,bbm-prometheus-svc,bbm-prometheus-svc.nok-bbm,bbm-prometheus-svc.nok-bbm.svc,bbm-prometheus-svc.nok-bbm.svc.cluster.local
+NO_PROXY := 127.0.0.1,localhost,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,10.96.0.0/12,10.244.0.0/16,gitea.nok.local,.nok.local,.svc,.svc.cluster.local,bbm-grafana-svc,bbm-grafana-svc.nok-bbm,bbm-grafana-svc.nok-bbm.svc,bbm-grafana-svc.nok-bbm.svc.cluster.local,bbm-prometheus-svc,bbm-prometheus-svc.nok-bbm,bbm-prometheus-svc.nok-bbm.svc,bbm-prometheus-svc.nok-bbm.svc.cluster.local
 
 # --- Git Repository Configuration ---
 SRLINUX_IMAGE ?= registry.srlinux.dev/pub/nokia_srsim:25.10.R1
@@ -168,7 +168,7 @@ endef
 try-nok: check-tools cluster-up git-clone-kpt git-clone-clab install-base-pkg install-lb-pkg install-prom-oper install-gnmic-oper start-ingress-port-forward install-bbm-pkg ## Deploy Base Apps, clone kpt and clab repos, install base packages / load balancer / prometheus and gnmic operators, port forward
 
 .PHONY: try-nok-bng
-try-nok-bng: try-nok install-bng-pkg install-git-pkg configure-auth configure-auth-ingress gitops-init gitops-bng-kustomization install-bbm-pkg ## Deploy BNG and GitOps
+try-nok-bng: try-nok install-bng-pkg install-git-pkg configure-auth gitops-init gitops-bng-kustomization install-bbm-pkg ## Deploy BNG and GitOps
 
 .PHONY: gitops-init
 gitops-init: gitea-create-admin gitea-create-flux-repo gitea-add-ssh-key  flux-bootstrap ## Create Gitea admin, create Flux repo, add SSH key, bootstrap Flux
@@ -692,30 +692,10 @@ configure-auth:
 	@$(KUBECTL) apply -f $(PORTAL_DIR)/portal-auth-svc.yaml
 	@$(KUBECTL) apply -f $(PORTAL_DIR)/portal-auth-deploy.yaml
 	@$(KUBECTL) apply -f $(PORTAL_DIR)/portal-ingress.yaml
+	@$(KUBECTL) apply -f $(PORTAL_DIR)/portal-bbm-grafana-proxy-svc.yaml
+	@$(KUBECTL) apply -f $(PORTAL_DIR)/portal-health-ingress.yaml
 
 	@echo "--> AUTH: Deployment completed"
-
-AUTH_SIGNIN ?= http://bng.nok.local:8080/login?rd=$$$$request_uri
-AUTH_URL ?= http://portal-auth.nok-bng.svc.cluster.local/auth
-
-.PHONY: configure-auth-ingress
-configure-auth-ingress: ## Add authentication annotations to ingresses
-
-	@echo "--> AUTH: Adding auth annotations to nok-apps-ingress"
-	@$(KUBECTL) annotate ingress nok-apps-ingress \
-	-n nok-bng \
-	nginx.ingress.kubernetes.io/auth-signin="$(AUTH_SIGNIN)" \
-	nginx.ingress.kubernetes.io/auth-url="$(AUTH_URL)" \
-	--overwrite
-
-	@echo "--> AUTH: Adding auth annotations to nok-apps-portal-ingress"
-	@$(KUBECTL) annotate ingress nok-apps-portal-ingress \
-	-n nok-bng \
-	nginx.ingress.kubernetes.io/auth-signin="$(AUTH_SIGNIN)" \
-	nginx.ingress.kubernetes.io/auth-url="$(AUTH_URL)" \
-	--overwrite
-
-	@echo "--> AUTH: Ingress authentication annotations applied"
 
 
 .PHONY: update-portal-auth
@@ -756,11 +736,11 @@ update-portal-auth:
 PROXY_DEPLOYMENTS := \
 nok-bbm:bbm-grafana \
 nok-bbm:coredns-updater \
-nok-bng:grafana-deployment \
 nok-bbm:bbm-prometheus-deployment \
 nok-bbm:kube-state-metrics \
 nok-bbm:blackbox-exporter \
-nok-base:grafana-operator-controller-manager
+nok-base:grafana-operator-controller-manager \
+nok-bng:grafana-deployment
 
 .PHONY: set-proxy-env
 set-proxy-env:
