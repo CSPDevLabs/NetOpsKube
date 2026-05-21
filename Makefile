@@ -677,18 +677,8 @@ PORTAL_DIR ?= $(NOK_KPT_DIR)/nok-bng/portal
 
 .PHONY: configure-auth
 configure-auth:
-	@echo "--> AUTH: Building flask-auth-service image"
+	@echo "--> AUTH: Configure nok-portal-auth"
 	@$(KUBECTL) apply -f $(PORTAL_DIR)/portal-auth-secret.yaml
-	@BUILD_ARGS=""
-	@if [ -n "$(HTTP_PROXY)" ]; then BUILD_ARGS="$$BUILD_ARGS --build-arg HTTP_PROXY=$(HTTP_PROXY)"; fi; \
-	if [ -n "$(HTTPS_PROXY)" ]; then BUILD_ARGS="$$BUILD_ARGS --build-arg HTTPS_PROXY=$(HTTPS_PROXY)"; fi; \
-	if [ -n "$(NO_PROXY)" ]; then BUILD_ARGS="$$BUILD_ARGS --build-arg NO_PROXY=$(NO_PROXY)"; fi; \
-	cd $(PORTAL_DIR) && docker build $$BUILD_ARGS -t flask-auth-service .
-
-	@echo "--> AUTH: Loading image into Kind cluster"
-	@$(KIND) load docker-image flask-auth-service --name $(KIND_CLUSTER_NAME)
-
-	@echo "--> AUTH: Applying Kubernetes manifests"
 	@$(KUBECTL) apply -f $(PORTAL_DIR)/portal-auth-svc.yaml
 	@$(KUBECTL) apply -f $(PORTAL_DIR)/portal-auth-deploy.yaml
 	@$(KUBECTL) apply -f $(PORTAL_DIR)/portal-ingress.yaml
