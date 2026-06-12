@@ -5,6 +5,18 @@ UNAME := $(shell uname)
 # Lowercase - sane version
 OS := $(shell echo "$(UNAME)" | tr '[:upper:]' '[:lower:]')
 
+# Force bash on supported platforms only: macOS (Darwin), Ubuntu LTS, Rocky Linux.
+# Other systems keep Make's default SHELL (/bin/sh) to avoid silent assumptions!
+# Tested on Rocky Linux 9.7 and Ubuntu 24.04.4 LTS
+DISTRO_ID := $(shell . /etc/os-release 2>/dev/null && echo $$ID)
+ifeq ($(UNAME),Darwin)
+SHELL := /bin/bash
+else ifeq ($(DISTRO_ID),ubuntu)
+SHELL := /bin/bash
+else ifeq ($(DISTRO_ID),rocky)
+SHELL := /bin/bash
+endif
+
 ARCH_QUERY := $(shell uname -m)
 ifeq ($(ARCH_QUERY), x86_64)
 	ARCH := amd64
@@ -38,13 +50,34 @@ GH ?= $(TOOLS)/gh
 CLAB ?= $(TOOLS)/clab
 FLUX ?= $(TOOLS)/flux
 
+# --- Sub-Makefiles ---
+# Troubleshooting / day-2 ops targets live in their own file to keep this
+# Makefile focused on install + deploy. See docs/TROUBLESHOOTING.md.
+include make/troubleshoot.mk
 
-# Optional proxy settings
-HTTP_PROXY ?=
-HTTPS_PROXY ?=
-NO_PROXY := 127.0.0.1,localhost,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,10.96.0.0/12,10.244.0.0/16,gitea.nok.local,.nok.local,.svc,.svc.cluster.local,bbm-grafana-svc,bbm-grafana-svc.nok-bbm,bbm-grafana-svc.nok-bbm.svc,bbm-grafana-svc.nok-bbm.svc.cluster.local,bbm-prometheus-svc,bbm-prometheus-svc.nok-bbm,bbm-prometheus-svc.nok-bbm.svc,bbm-prometheus-svc.nok-bbm.svc.cluster.local
+
+# --- Proxy Settings ---
+# Make sure environment variables are set before using them `export HTTP_PROXY=...`
+# Proxy settings: inherited from the shell. Set HTTP_PROXY / HTTPS_PROXY /
+# NO_PROXY in your environment before running the Makefile.
+export HTTP_PROXY ?=
+export HTTPS_PROXY ?=
+# NO_PROXY_LOOPBACK := 127.0.0.1,localhost,::1
+# NO_PROXY_RFC1918  := 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,10.96.0.0/12,10.244.0.0/16
+# NO_PROXY_SUFFIXES := .nok.local,.svc,.svc.cluster.local
+# NO_PROXY_SHORT    := gitea.nok.local,bbm-grafana-svc,bbm-grafana-svc.nok-bbm,bbm-grafana-svc.nok-bbm.svc,bbm-grafana-svc.nok-bbm.svc.cluster.local,bbm-prometheus-svc,bbm-prometheus-svc.nok-bbm,bbm-prometheus-svc.nok-bbm.svc,bbm-prometheus-svc.nok-bbm.svc.cluster.local
+# NO_PROXY := $(NO_PROXY_LOOPBACK),$(NO_PROXY_RFC1918),$(NO_PROXY_SUFFIXES),$(NO_PROXY_SHORT)
+export NO_PROXY := 127.0.0.1,localhost,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,10.96.0.0/12,10.244.0.0/16,gitea.nok.local,.nok.local,.svc,.svc.cluster.local,bbm-grafana-svc,bbm-grafana-svc.nok-bbm,bbm-grafana-svc.nok-bbm.svc,bbm-grafana-svc.nok-bbm.svc.cluster.local,bbm-prometheus-svc,bbm-prometheus-svc.nok-bbm,bbm-prometheus-svc.nok-bbm.svc,bbm-prometheus-svc.nok-bbm.svc.cluster.local
+
+
+# Deployments (namespace:name) that receive proxy env via set-proxy-env / unset-proxy-env.
+PROXY_DEPLOYMENTS := \
+nok-bbm:coredns-updater \
+nok-bbm:blackbox-exporter \
+nok-base:grafana-operator-controller-manager
 
 # --- Git Repository Configuration ---
+# Define the SROS image and license file for the BNG deployment
 SRLINUX_IMAGE ?= registry.srlinux.dev/pub/nokia_srsim:25.10.R1
 SRSIM_LICENSE_FILE ?= $(NOK_CLABS_DIR)/nok-bng/srsim-lic-25.txt
 
@@ -164,11 +197,30 @@ define INSTALL_KPT_PACKAGE_WITH_SETTERS
 	}
 endef
 
+.PHONY: os-shell 
+os-shell: ## Verify the OS, ARCH, SHELL, DISTRO_ID, and ARCH_QUERY, output as JSON
+	@echo "{"
+	@echo "    \"OS\": \"$(OS)\","
+	@echo "    \"UNAME\": \"$(UNAME)\","
+	@echo "    \"ARCH\": \"$(ARCH)\","
+	@echo "    \"SHELL\": \"$(SHELL)\","
+	@echo "    \"DISTRO_ID\": \"$(DISTRO_ID)\","
+	@echo "    \"ARCH_QUERY\": \"$(ARCH_QUERY)\""
+	@echo "}"
+
+.PHONY: proxy-env
+proxy-env: ## Verify proxy environment variables are set
+	@echo "{"
+	@echo "    \"HTTP_PROXY\": \"$(HTTP_PROXY)\","
+	@echo "    \"HTTPS_PROXY\": \"$(HTTPS_PROXY)\","
+	@echo "    \"NO_PROXY\": \"$(NO_PROXY)\""
+	@echo "}"
+
 .PHONY: try-nok
 try-nok: check-tools cluster-up git-clone-kpt git-clone-clab install-base-pkg install-lb-pkg install-prom-oper install-gnmic-oper start-ingress-port-forward install-bbm-pkg ## Deploy Base Apps, clone kpt and clab repos, install base packages / load balancer / prometheus and gnmic operators, port forward
 
 .PHONY: try-nok-bng
-try-nok-bng: try-nok install-bng-pkg install-git-pkg configure-auth gitops-init gitops-bng-kustomization install-bbm-pkg ## Deploy BNG and GitOps
+try-nok-bng: try-nok install-bng-pkg install-git-pkg configure-auth gitops-init gitops-bng-kustomization ## Deploy BNG and GitOps
 
 .PHONY: gitops-init
 gitops-init: gitea-create-admin gitea-create-flux-repo gitea-add-ssh-key  flux-bootstrap ## Create Gitea admin, create Flux repo, add SSH key, bootstrap Flux
@@ -450,7 +502,7 @@ install-prom-oper: $(KUBECTL) ## Installs the Prometheus Operator manifest
 		exit 1; \
 	fi
 	@echo -e "--> INSTALL: [\033[1;34mPrometheus Operator\033[0m] - Applying manifest..."
-	@$(KUBECTL) create -f ./nok-kpt/nok-base-prometheus-oper/manifest-prometheus-oper.yaml
+	@$(KUBECTL) apply --server-side -f ./nok-kpt/nok-base-prometheus-oper/manifest-prometheus-oper.yaml
 	@echo -e "--> INSTALL: [\033[0;32mPrometheus Operator\033[0m] - Manifest applied successfully."
 
 .PHONY: install-gnmic-oper
@@ -722,15 +774,6 @@ update-portal-auth:
 	\
 	echo "Credentials updated successfully"
 
-
-PROXY_DEPLOYMENTS := \
-nok-bbm:bbm-grafana \
-nok-bbm:coredns-updater \
-nok-bbm:bbm-prometheus-deployment \
-nok-bbm:kube-state-metrics \
-nok-bbm:blackbox-exporter \
-nok-base:grafana-operator-controller-manager \
-nok-bng:grafana-deployment
 
 .PHONY: set-proxy-env
 set-proxy-env:
