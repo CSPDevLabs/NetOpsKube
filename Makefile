@@ -74,7 +74,8 @@ export NO_PROXY := 127.0.0.1,localhost,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/
 PROXY_DEPLOYMENTS := \
 nok-bbm:coredns-updater \
 nok-bbm:blackbox-exporter \
-nok-base:grafana-operator-controller-manager
+nok-base:grafana-operator-controller-manager \
+nok-base:config-server
 
 # --- Git Repository Configuration ---
 # Define the SROS image and license file for the BNG deployment
