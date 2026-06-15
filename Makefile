@@ -39,10 +39,32 @@ CLAB ?= $(TOOLS)/clab
 FLUX ?= $(TOOLS)/flux
 
 
-# Optional proxy settings
-HTTP_PROXY ?=
-HTTPS_PROXY ?=
-NO_PROXY := 127.0.0.1,localhost,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,10.96.0.0/12,10.244.0.0/16,gitea.nok.local,.nok.local,.svc,.svc.cluster.local,bbm-grafana-svc,bbm-grafana-svc.nok-bbm,bbm-grafana-svc.nok-bbm.svc,bbm-grafana-svc.nok-bbm.svc.cluster.local,bbm-prometheus-svc,bbm-prometheus-svc.nok-bbm,bbm-prometheus-svc.nok-bbm.svc,bbm-prometheus-svc.nok-bbm.svc.cluster.local
+# --- Sub-Makefiles ---
+# Troubleshooting / day-2 ops targets live in their own file to keep this
+# Makefile focused on install + deploy. See docs/TROUBLESHOOTING.md.
+include make/troubleshoot.mk
+
+
+# --- Proxy Settings ---
+# Make sure environment variables are set before using them `export HTTP_PROXY=...`
+# Proxy settings: inherited from the shell. Set HTTP_PROXY / HTTPS_PROXY /
+# NO_PROXY in your environment before running the Makefile.
+export HTTP_PROXY ?=
+export HTTPS_PROXY ?=
+# NO_PROXY_LOOPBACK := 127.0.0.1,localhost,::1
+# NO_PROXY_RFC1918  := 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,10.96.0.0/12,10.244.0.0/16
+# NO_PROXY_SUFFIXES := .nok.local,.svc,.svc.cluster.local
+# NO_PROXY_SHORT    := gitea.nok.local,bbm-grafana-svc,bbm-grafana-svc.nok-bbm,bbm-grafana-svc.nok-bbm.svc,bbm-grafana-svc.nok-bbm.svc.cluster.local,bbm-prometheus-svc,bbm-prometheus-svc.nok-bbm,bbm-prometheus-svc.nok-bbm.svc,bbm-prometheus-svc.nok-bbm.svc.cluster.local
+# NO_PROXY := $(NO_PROXY_LOOPBACK),$(NO_PROXY_RFC1918),$(NO_PROXY_SUFFIXES),$(NO_PROXY_SHORT)
+export NO_PROXY := 127.0.0.1,localhost,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,10.96.0.0/12,10.244.0.0/16,gitea.nok.local,.nok.local,.svc,.svc.cluster.local,bbm-grafana-svc,bbm-grafana-svc.nok-bbm,bbm-grafana-svc.nok-bbm.svc,bbm-grafana-svc.nok-bbm.svc.cluster.local,bbm-prometheus-svc,bbm-prometheus-svc.nok-bbm,bbm-prometheus-svc.nok-bbm.svc,bbm-prometheus-svc.nok-bbm.svc.cluster.local
+
+
+# Deployments (namespace:name) that receive proxy env via set-proxy-env / unset-proxy-env.
+PROXY_DEPLOYMENTS := \
+nok-bbm:coredns-updater \
+nok-bbm:blackbox-exporter \
+nok-base:grafana-operator-controller-manager \
+nok-base:config-server
 
 # --- Git Repository Configuration ---
 SRLINUX_IMAGE ?= registry.srlinux.dev/pub/nokia_srsim:25.10.R1
