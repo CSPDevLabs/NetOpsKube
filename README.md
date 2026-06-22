@@ -81,7 +81,7 @@ sudo docker exec -it clab-sros-bngt-bngblaster bash -c 'bngblaster -C pppoe.json
 ```
 This use case is based in a previous clab deployment. More details at https://github.com/CSPDevLabs/sros_bng_observability
 
-### Acess to Apps
+### Access the NetOpsKube Portal
 You can access the BNG service at http://bng.nok.local:8080/
 - Add bng.nok.local to the address server in /etc/hosts for your browser to find
 
