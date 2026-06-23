@@ -38,6 +38,9 @@ KIND_LAUNCH_CONFIG ?= /tmp/kind-config-$(KIND_CLUSTER_NAME).yaml
 NO_HOST_PORT_MAPPINGS ?= no
 EXT_HTTPS_PORT ?= 5443 # Port to map for external HTTPS access if NO_HOST_PORT_MAPPINGS is 'no'
 
+# Optional: Set to 'YES' to onboard Keycloak, otherwise 'NO'
+KEYCLOAK_ENABLED ?= YES
+
 # --- Tool Paths (now managed by Makefile) ---
 TOOLS ?= $(BASE)/tools
 KIND ?= $(TOOLS)/kind
@@ -77,6 +80,11 @@ nok-bbm:blackbox-exporter \
 nok-base:grafana-operator-controller-manager \
 nok-base:config-server
 
+ifneq ($(filter YES yes Yes,$(KEYCLOAK_ENABLED)),)
+PROXY_DEPLOYMENTS += \
+	nok-bng:oauth2-proxy
+endif
+
 # --- Git Repository Configuration ---
 # Define the SROS image and license file for the BNG deployment
 SRLINUX_IMAGE ?= registry.srlinux.dev/pub/nokia_srsim:25.10.R1
@@ -87,6 +95,12 @@ KPT_REPO_URL ?= https://github.com/CSPDevLabs/kpt
 
 NOK_CLABS_DIR ?= $(BASE)/nok-clabs
 CLABS_REPO_URL ?= https://github.com/CSPDevLabs/nok-clabs
+
+NOK_KEYCLOAK_DIR ?= $(BASE)/nok-portal-auth
+KEYCLOAK_REPO_URL ?= https://github.com/CSPDevLabs/nok-portal-auth
+KEYCLOAK_REPO_BRANCH ?= keycloak
+KEYCLOAK_DIR ?= $(BASE)/nok-portal-auth/keycloak
+OAUTH2_PROXY_DIR  ?= $(BASE)/nok-portal-auth/oauth2-proxy
 
 # Internal helper for output indentation
 INDENT_OUT ?= sed 's/^/    /'
@@ -726,54 +740,59 @@ create-bng-kustomizations:
 		fi \
 	done	
 
-PORTAL_DIR ?= $(NOK_KPT_DIR)/nok-bng/portal
 
 .PHONY: configure-auth
+
+ifeq ($(KEYCLOAK_ENABLED),YES)
+
 configure-auth:
 	@echo "--> AUTH: Configure nok-portal-auth"
-	@$(KUBECTL) apply -f $(PORTAL_DIR)/portal-auth-secret.yaml
-	@$(KUBECTL) apply -f $(PORTAL_DIR)/portal-auth-svc.yaml
-	@$(KUBECTL) apply -f $(PORTAL_DIR)/portal-auth-deploy.yaml
-	@$(KUBECTL) apply -f $(PORTAL_DIR)/portal-ingress.yaml
-	@$(KUBECTL) apply -f $(PORTAL_DIR)/portal-bbm-grafana-proxy-svc.yaml
-	@$(KUBECTL) apply -f $(PORTAL_DIR)/portal-health-ingress.yaml
+
+	@if [ ! -d "$(NOK_KEYCLOAK_DIR)" ]; then \
+		git clone -b $(KEYCLOAK_REPO_BRANCH) $(KEYCLOAK_REPO_URL) $(NOK_KEYCLOAK_DIR) ;\
+	else \
+		echo "--> GIT: $(NOK_KEYCLOAK_DIR) already exists. Skipping clone." ;\
+	fi
+
+	@$(KUBECTL) apply -f $(KEYCLOAK_DIR)/postgres-secret.yaml
+	@$(KUBECTL) apply -f $(KEYCLOAK_DIR)/postgres-service.yaml
+	@$(KUBECTL) apply -f $(KEYCLOAK_DIR)/postgres-statefulset.yaml
+
+	@$(KUBECTL) apply -f $(KEYCLOAK_DIR)/keycloak-portal-html-config.yaml
+	@$(KUBECTL) rollout restart deployment nok-apps-portal-app -n nok-bng
+	@$(KUBECTL) apply -f $(KEYCLOAK_DIR)/keycloak-admin-secret.yaml
+	@$(KUBECTL) apply -f $(KEYCLOAK_DIR)/keycloak-realm-configmap.yaml
+	@$(KUBECTL) apply -f $(KEYCLOAK_DIR)/keycloak-svc.yaml
+	@$(KUBECTL) apply -f $(KEYCLOAK_DIR)/keycloak-deploy.yaml
+	@$(KUBECTL) apply -f $(KEYCLOAK_DIR)/keycloak-ingress.yaml
+
+	@$(KUBECTL) apply -f $(OAUTH2_PROXY_DIR)/oauth2-proxy-secret.yaml
+	@$(KUBECTL) apply -f $(OAUTH2_PROXY_DIR)/oauth2-proxy-svc.yaml
+	@$(KUBECTL) apply -f $(OAUTH2_PROXY_DIR)/oauth2-proxy-deploy.yaml
+	@$(KUBECTL) apply -f $(OAUTH2_PROXY_DIR)/oauth2-proxy-ingress.yaml
+
+	@echo "--> AUTH: Patching application ingresses"
+
+	@$(KUBECTL) annotate ingress nok-apps-ingress \
+		-n nok-bng \
+		nginx.ingress.kubernetes.io/auth-url="http://oauth2-proxy.nok-bng.svc.cluster.local/oauth2/auth" \
+		nginx.ingress.kubernetes.io/auth-signin="http://bng.nok.local:8080/oauth2/start?rd=\$$escaped_request_uri" \
+		--overwrite
+
+	@$(KUBECTL) annotate ingress nok-apps-portal-ingress \
+		-n nok-bng \
+		nginx.ingress.kubernetes.io/auth-url="http://oauth2-proxy.nok-bng.svc.cluster.local/oauth2/auth" \
+		nginx.ingress.kubernetes.io/auth-signin="http://bng.nok.local:8080/oauth2/start?rd=\$$escaped_request_uri" \
+		--overwrite
 
 	@echo "--> AUTH: Deployment completed"
 
+else
 
-.PHONY: update-portal-auth
-update-portal-auth:
-	@echo "--> AUTH: Verifying current credentials"; \
-	read -p "Enter current username: " CUR_USER; \
-	read -s -p "Enter current password: " CUR_PASS; echo ""; \
-	\
-	REAL_USER=$$(kubectl get secret portal-auth-secret -n nok-bng -o jsonpath='{.data.username}' | base64 -d); \
-	REAL_PASS=$$(kubectl get secret portal-auth-secret -n nok-bng -o jsonpath='{.data.password}' | base64 -d); \
-	\
-	if [ "$$CUR_USER" != "$$REAL_USER" ] || [ "$$CUR_PASS" != "$$REAL_PASS" ]; then \
-		echo "Incorrect current credentials"; \
-		exit 1; \
-	fi; \
-	\
-	echo "--> AUTH: Enter new credentials"; \
-	read -p "New username: " NEW_USER; \
-	read -s -p "New password: " NEW_PASS; echo ""; \
-	\
-	if [ -z "$$NEW_USER" ] || [ -z "$$NEW_PASS" ]; then \
-		echo "Username or password cannot be empty"; \
-		exit 1; \
-	fi; \
-	\
-	kubectl create secret generic portal-auth-secret \
-		-n nok-bng \
-		--from-literal=username="$$NEW_USER" \
-		--from-literal=password="$$NEW_PASS" \
-		--dry-run=client -o yaml | kubectl apply -f -; \
-	\
-	echo "--> AUTH: Restarting auth deployment"; \
-	kubectl rollout restart deployment portal-auth -n nok-bng; \
-	\
-	echo "Credentials updated successfully"
+configure-auth:
+	@echo "--> AUTH: Keycloak disabled. Skipping authentication deployment."
+
+endif
 
 
 .PHONY: set-proxy-env

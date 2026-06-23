@@ -81,7 +81,7 @@ sudo docker exec -it clab-sros-bngt-bngblaster bash -c 'bngblaster -C pppoe.json
 ```
 This use case is based in a previous clab deployment. More details at https://github.com/CSPDevLabs/sros_bng_observability
 
-### Acess to Apps
+### Access the NetOpsKube Portal
 You can access the BNG service at http://bng.nok.local:8080/
 - Add bng.nok.local to the address server in /etc/hosts for your browser to find
 
@@ -90,6 +90,39 @@ BNG use case can be tested locally via:
 curl --resolve bng.nok.local:8080:127.0.0.1 http://bng.nok.local:8080
 ```
 
+### Onboard Keycloak
+
+Keycloak is used as the Identity Provider (IdP) for NetOpsKube and provides authentication and authorization through OpenID Connect (OIDC). Authentication is enforced using OAuth2 Proxy integrated with the Kubernetes NGINX Ingress Controller. It is completely optional.
+
+You can enable it by setting below parameter to 'YES'.
+
+```bash
+KEYCLOAK_ENABLED ?= YES
+```
+
+#### Access Keycloak Admin Console
+
+URL: http://keycloak.nok.local:8080/admin/master/console
+
+```bash
+Username - admin
+Password - admin
+```
+
+#### User Management
+
+Select Realm 'netopskube'. User accounts should be created manually through the Keycloak Admin Console.
+
+Navigation: Users → Create User
+
+##### Required Fields
+
+* Username
+* Email
+* First Name
+* Last Name
+
+
 ### Proxy Configuration
 In environments where outbound internet access is restricted, you may need to configure HTTP/HTTPS proxy settings for certain workloads.
  
@@ -97,7 +130,7 @@ Proxy values can be configured in the Makefile by updating the following variabl
 ```bash
 HTTP_PROXY  ?= http://<proxy-ip>:<port>
 HTTPS_PROXY ?= http://<proxy-ip>:<port>
-NO_PROXY    ?= 127.0.0.1,localhost,::1,.svc,.cluster.local,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,10.96.0.0/12,10.244.0.0/16,.nok.local,gitea.nok.local
+NO_PROXY    ?= 127.0.0.1,localhost,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,10.96.0.0/12,10.244.0.0/16,gitea.nok.local,.nok.local,.svc,.svc.cluster.local,bbm-grafana-svc,bbm-grafana-svc.nok-bbm,bbm-grafana-svc.nok-bbm.svc,bbm-grafana-svc.nok-bbm.svc.cluster.local,bbm-prometheus-svc,bbm-prometheus-svc.nok-bbm,bbm-prometheus-svc.nok-bbm.svc,bbm-prometheus-svc.nok-bbm.svc.cluster.local
 ```
 
 #### Apply Proxy to Deployments
