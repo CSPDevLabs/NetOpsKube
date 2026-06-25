@@ -39,7 +39,7 @@ NO_HOST_PORT_MAPPINGS ?= no
 EXT_HTTPS_PORT ?= 5443 # Port to map for external HTTPS access if NO_HOST_PORT_MAPPINGS is 'no'
 
 # Optional: Set to 'YES' to onboard Keycloak, otherwise 'NO'
-KEYCLOAK_ENABLED ?= YES
+KEYCLOAK_ENABLED ?= NO
 
 # --- Tool Paths (now managed by Makefile) ---
 TOOLS ?= $(BASE)/tools
