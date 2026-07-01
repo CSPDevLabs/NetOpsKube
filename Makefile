@@ -39,7 +39,7 @@ NO_HOST_PORT_MAPPINGS ?= no
 EXT_HTTPS_PORT ?= 5443 # Port to map for external HTTPS access if NO_HOST_PORT_MAPPINGS is 'no'
 
 # Optional: Set to 'YES' to onboard Keycloak, otherwise 'NO'
-KEYCLOAK_ENABLED ?= YES
+KEYCLOAK_ENABLED ?= NO
 
 # --- Tool Paths (now managed by Makefile) ---
 TOOLS ?= $(BASE)/tools
@@ -152,14 +152,21 @@ GITEA_ADMIN_PASS ?= N0kP4ssw0rd
 GITEA_ADMIN_EMAIL ?= nok@example.com
 
 FLUX_GIT_REPO ?= flux-bootstrap
-FLUX_BNG_REPO ?= nok-bng-resources
-FLUX_BNG_SECRET ?= nok-bng-auth
 FLUX_GIT_BRANCH ?= main
 FLUX_CLUSTER_PATH ?= clusters/NetOpsKube
 FLUX_SSH_KEY ?= $(HOME)/.ssh/flux_ed25519
 
+## use cases
+FLUX_BNG_REPO ?= nok-bng-resources
+FLUX_BNG_SECRET ?= nok-bng-auth
 BNG_MANIFESTS_DIR := ./nok-clabs/nok-bng/nok-manifests
 BNG_REPO_URL := ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_BNG_REPO).git
+
+FLUX_DIA_REPO ?= nok-dia-resources
+FLUX_DIA_SECRET ?= nok-dia-auth
+DIA_MANIFESTS_DIR := ./nok-clabs/nok-dia/nok-manifests
+DIA_REPO_URL := ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_DIA_REPO).git
+
 
 define GET_GITEA_POD
 $(shell $(KUBECTL) get pods -n $(GITOPS_NAMESPACE) \
@@ -237,6 +244,9 @@ try-nok: check-tools cluster-up git-clone-kpt git-clone-clab install-base-pkg in
 .PHONY: try-nok-bng
 try-nok-bng: try-nok install-bng-pkg install-git-pkg configure-auth gitops-init gitops-bng-kustomization ## Deploy BNG and GitOps
 
+.PHONY: try-nok-dia
+try-nok-dia: try-nok install-dia-pkg install-git-pkg configure-auth gitops-init gitops-dia-kustomization ## Deploy BNG and GitOps
+
 .PHONY: gitops-init
 gitops-init: gitea-create-admin gitea-create-flux-repo gitea-add-ssh-key  flux-bootstrap ## Create Gitea admin, create Flux repo, add SSH key, bootstrap Flux
 	@echo "--> GITOPS: Cluster is now managed by Flux"
@@ -244,6 +254,10 @@ gitops-init: gitea-create-admin gitea-create-flux-repo gitea-add-ssh-key  flux-b
 .PHONY: gitops-bng-kustomization
 gitops-bng-kustomization: gitea-create-bng-repo flux-create-bng-secret flux-create-bng-source push-bng-manifests create-bng-kustomizations
 	@echo "--> GITOPS: BNG repo in sync by Flux"
+
+.PHONY: gitops-dia-kustomization
+gitops-dia-kustomization: gitea-create-dia-repo flux-create-dia-secret flux-create-dia-source push-dia-manifests create-dia-kustomizations
+	@echo "--> GITOPS: DIA repo in sync by Flux"
 
 .PHONY: cluster-up
 cluster-up: $(KIND_CONFIG_REAL_LOC) ## Bring up the KinD cluster
@@ -375,8 +389,8 @@ git-clone-clab: ## Clones the CSPDevLabs/nok-clabs repository into ./nok-clabs
 	fi
 
 .PHONY: check-clab-prerequisites
-check-clab-prerequisites: ## Checks for required Docker image and SROS license file for Containerlab BNG
-	@echo "--> CLAB: Checking prerequisites for BNG deployment..."
+check-clab-prerequisites: ## Checks for required Docker image and SROS license file for Containerlab
+	@echo "--> CLAB: Checking prerequisites for CLAB deployment..."
 	@{ \
 		if [ -z "$$(docker images -q $(SRLINUX_IMAGE) 2> /dev/null)" ]; then \
 			echo "Error: Required Docker image '$(SRLINUX_IMAGE)' not found locally." ;\
@@ -404,6 +418,16 @@ deploy-clab-bng: check-tools git-clone-clab check-clab-prerequisites ## Deploys 
 		exit 1 ;\
 	fi
 
+.PHONY: deploy-clab-dia
+deploy-clab-dia: check-tools git-clone-clab check-clab-prerequisites ## Deploys the Containerlab DIA topology
+	@echo "--> CLAB: Deploying DIA topology from $(NOK_CLABS_DIR)/nok-dia"
+	@if [ -d "$(NOK_CLABS_DIR)/nok-dia" ]; then \
+		cd $(NOK_CLABS_DIR)/nok-dia && $(CLAB) deploy -t topo.yaml ;\
+	else \
+		echo "Error: $(NOK_CLABS_DIR)/nok-dia directory not found. Please ensure the nok-clabs repository is cloned and contains the nok-dia subdirectory." ;\
+		exit 1 ;\
+	fi
+
 
 .PHONY: destroy-clab-bng
 destroy-clab-bng: check-tools git-clone-clab ## Destroys the Containerlab BNG topology and cleans up
@@ -414,6 +438,18 @@ destroy-clab-bng: check-tools git-clone-clab ## Destroys the Containerlab BNG to
 		echo "Error: $(NOK_CLABS_DIR)/nok-bng directory not found. Please ensure the nok-clabs repository is cloned and contains the nok-bng subdirectory." ;\
 		exit 1 ;\
 	fi	
+
+
+.PHONY: destroy-clab-dia
+destroy-clab-dia: check-tools git-clone-clab ## Destroys the Containerlab DIA topology and cleans up
+	@echo "--> CLAB: Destroying DIA topology from $(NOK_CLABS_DIR)/nok-dia"
+	@if [ -d "$(NOK_CLABS_DIR)/nok-dia" ]; then \
+		cd $(NOK_CLABS_DIR)/nok-dia && $(CLAB) destroy --cleanup -t topo.yaml ;\
+	else \
+		echo "Error: $(NOK_CLABS_DIR)/nok-dia directory not found. Please ensure the nok-clabs repository is cloned and contains the nok-dia subdirectory." ;\
+		exit 1 ;\
+	fi	
+
 
 # --- Directory Creation Rules ---
 $(BASE):
@@ -500,8 +536,12 @@ install-lb-pkg: check-tools git-clone-kpt install-base-pkg wait-for-metallb-read
 install-bng-pkg: check-tools git-clone-kpt install-base-pkg install-lb-pkg ## Installs the base kpt package from ./nok-kpt/nok-bng
 	@$(call INSTALL_KPT_PACKAGE,$(NOK_KPT_DIR)/nok-bng,nok-bng,"--reconcile-timeout=5m", "--inventory-policy=adopt")		
 
+.PHONY: install-dia-pkg
+install-dia-pkg: check-tools git-clone-kpt install-base-pkg install-lb-pkg ## Installs the base kpt package from ./nok-kpt/nok-dia
+	@$(call INSTALL_KPT_PACKAGE,$(NOK_KPT_DIR)/nok-dia,nok-dia,"--reconcile-timeout=5m", "--inventory-policy=adopt")
+
 .PHONY: install-git-pkg
-install-git-pkg: check-tools git-clone-kpt install-base-pkg install-lb-pkg ## Installs the base kpt package from ./nok-kpt/nok-bng
+install-git-pkg: check-tools git-clone-kpt install-base-pkg install-lb-pkg ## Installs the base kpt package from ./nok-kpt/nok-git
 	@$(call INSTALL_KPT_PACKAGE,$(NOK_KPT_DIR)/nok-git,nok-git,"--reconcile-timeout=5m", "--inventory-policy=adopt")	
 
 
@@ -672,6 +712,21 @@ gitea-create-bng-repo:
 	  -d '{"name":"$(FLUX_BNG_REPO)", "description": "BNG resources for Network Observability and Conf Management","private":false,"auto_init":true}' \
 	  http://$(GITEA_HOST)/api/v1/user/repos
 
+.PHONY: gitea-create-dia-repo
+gitea-create-dia-repo:
+	@echo "--> GITEA: Ensuring repo $(FLUX_DIA_REPO) exists"
+	@$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) \
+	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
+	  http://$(GITEA_HOST)/api/v1/repos/$(GITEA_ADMIN_USER)/$(FLUX_DIA_REPO) \
+	  >/dev/null || \
+	$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) \
+	  -X POST \
+	  -H "Content-Type: application/json" \
+	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
+	  -d '{"name":"$(FLUX_DIA_REPO)", "description": "DIA resources for Network Observability and Conf Management","private":false,"auto_init":true}' \
+	  http://$(GITEA_HOST)/api/v1/user/repos
+
+
 .PHONY: flux-create-bng-secret
 flux-create-bng-secret:
 	@echo "--> FLUX: Ensuring Git secret $(FLUX_BNG_SECRET) exists"
@@ -685,6 +740,21 @@ flux-create-bng-secret:
 	else \
 		echo "Git secret $(FLUX_BNG_SECRET) already exists."; \
 	fi
+
+.PHONY: flux-create-dia-secret
+flux-create-dia-secret:
+	@echo "--> FLUX: Ensuring Git secret $(FLUX_DIA_SECRET) exists"
+	@if ! $(KUBECTL) get secret $(FLUX_DIA_SECRET) -n flux-system > /dev/null 2>&1; then \
+		echo "Creating Git secret $(FLUX_DIA_SECRET)..."; \
+		$(FLUX) create secret git $(FLUX_DIA_SECRET) \
+		  --url=ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_DIA_REPO).git \
+		  --ssh-key-algorithm=ed25519 \
+		  --private-key-file=$(FLUX_SSH_KEY) \
+		  --namespace=flux-system; \
+	else \
+		echo "Git secret $(FLUX_DIA_SECRET) already exists."; \
+	fi
+
 
 .PHONY: flux-create-bng-source
 flux-create-bng-source:
@@ -700,6 +770,23 @@ flux-create-bng-source:
 	else \
 		echo "GitRepository source $(FLUX_BNG_REPO) already exists."; \
 	fi	  
+
+
+.PHONY: flux-create-dia-source
+flux-create-dia-source:
+	@echo "--> FLUX: Ensuring GitRepository source $(FLUX_DIA_REPO) exists"
+	@if ! $(KUBECTL) get gitrepository $(FLUX_DIA_REPO) -n flux-system > /dev/null 2>&1; then \
+		echo "Creating GitRepository source $(FLUX_DIA_REPO)..."; \
+		$(FLUX) create source git $(FLUX_DIA_REPO) \
+		  --url=ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_DIA_REPO).git \
+		  --branch=$(FLUX_GIT_BRANCH) \
+		  --secret-ref=$(FLUX_DIA_SECRET) \
+		  --interval=1m \
+		  --namespace=flux-system; \
+	else \
+		echo "GitRepository source $(FLUX_DIA_REPO) already exists."; \
+	fi	
+
 
 .PHONY: push-bng-manifests
 push-bng-manifests:
@@ -718,6 +805,25 @@ push-bng-manifests:
 
 	@echo "--> GIT: Full snapshot push completed"
 
+
+.PHONY: push-dia-manifests
+push-dia-manifests:
+	@echo "--> GIT: Forcing full snapshot push of DIA manifests to $(FLUX_DIA_REPO)"
+
+	@cd $(DIA_MANIFESTS_DIR) && \
+		( \
+			rm -rf .git && \
+			git init -b $(FLUX_GIT_BRANCH) && \
+			git remote add origin $(DIA_REPO_URL) && \
+			git add -A && \
+			git commit --allow-empty -m "Authoritative snapshot of DIA manifests" && \
+			git config core.sshCommand 'ssh -o IdentitiesOnly=yes -i $(FLUX_SSH_KEY)' && \
+			git push --force origin $(FLUX_GIT_BRANCH) \
+		)
+
+	@echo "--> GIT: Full snapshot push completed"
+
+
 .PHONY: create-bng-kustomizations
 create-bng-kustomizations:
 	@echo "--> FLUX: Ensuring Kustomizations for BNG manifests exist"
@@ -729,6 +835,29 @@ create-bng-kustomizations:
 				echo "Creating Kustomization for $$n..."; \
 				$(FLUX) create kustomization "$$n" \
 				  --source=GitRepository/$(FLUX_BNG_REPO) \
+				  --path="./$$n" \
+				  --prune=true \
+				  --interval=1m \
+				  --timeout=1m \
+				  --namespace=flux-system; \
+			else \
+				echo "Kustomization for $$n already exists."; \
+			fi \
+		fi \
+	done	
+
+
+.PHONY: create-dia-kustomizations
+create-dia-kustomizations:
+	@echo "--> FLUX: Ensuring Kustomizations for DIA manifests exist"
+	@for d in $(DIA_MANIFESTS_DIR)/*/; do \
+		n=$$(basename "$$d"); \
+		if [ "$$n" != ".git" ]; then \
+			echo "Checking Kustomization for $$n..."; \
+			if $(FLUX) get kustomization "$$n" -n flux-system 2>&1 | grep -q "not found"; then \
+				echo "Creating Kustomization for $$n..."; \
+				$(FLUX) create kustomization "$$n" \
+				  --source=GitRepository/$(FLUX_DIA_REPO) \
 				  --path="./$$n" \
 				  --prune=true \
 				  --interval=1m \
