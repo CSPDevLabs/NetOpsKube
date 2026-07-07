@@ -163,10 +163,12 @@ BNG_MANIFESTS_DIR := ./nok-clabs/nok-bng/nok-manifests
 BNG_REPO_URL := ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_BNG_REPO).git
 
 FLUX_DIA_REPO ?= nok-dia-resources
+FLUX_DIA_GRAFANA_REPO ?= grafana-dashboards
 FLUX_DIA_SECRET ?= nok-dia-auth
 DIA_MANIFESTS_DIR := ./nok-clabs/nok-dia/nok-manifests
+DIA_GRAFANA_DIR := ./nok-clabs/nok-dia/grafana-dashboards
 DIA_REPO_URL := ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_DIA_REPO).git
-
+DIA_GRAFANA_REPO_URL := ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_DIA_GRAFANA_REPO).git
 
 define GET_GITEA_POD
 $(shell $(KUBECTL) get pods -n $(GITOPS_NAMESPACE) \
@@ -256,7 +258,7 @@ gitops-bng-kustomization: gitea-create-bng-repo flux-create-bng-secret flux-crea
 	@echo "--> GITOPS: BNG repo in sync by Flux"
 
 .PHONY: gitops-dia-kustomization
-gitops-dia-kustomization: gitea-create-dia-repo flux-create-dia-secret flux-create-dia-source push-dia-manifests create-dia-kustomizations
+gitops-dia-kustomization: gitea-create-dia-repo gitea-create-dia-grafana-repo flux-create-dia-secret flux-create-dia-source push-dia-manifests push-dia-manifests push-dia-grafana create-dia-kustomizations
 	@echo "--> GITOPS: DIA repo in sync by Flux"
 
 .PHONY: cluster-up
@@ -727,6 +729,21 @@ gitea-create-dia-repo:
 	  http://$(GITEA_HOST)/api/v1/user/repos
 
 
+.PHONY: gitea-create-dia-grafana-repo
+gitea-create-dia-grafana-repo:
+	@echo "--> GITEA: Ensuring repo $(FLUX_DIA_GRAFANA_REPO) exists"
+	@$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) \
+	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
+	  http://$(GITEA_HOST)/api/v1/repos/$(GITEA_ADMIN_USER)/$(FLUX_DIA_GRAFANA_REPO) \
+	  >/dev/null || \
+	$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) \
+	  -X POST \
+	  -H "Content-Type: application/json" \
+	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
+	  -d '{"name":"$(FLUX_DIA_GRAFANA_REPO)", "description": "NetOpsKube DIA Grafana Dashboards","private":false,"auto_init":true}' \
+	  http://$(GITEA_HOST)/api/v1/user/repos
+
+
 .PHONY: flux-create-bng-secret
 flux-create-bng-secret:
 	@echo "--> FLUX: Ensuring Git secret $(FLUX_BNG_SECRET) exists"
@@ -787,7 +804,6 @@ flux-create-dia-source:
 		echo "GitRepository source $(FLUX_DIA_REPO) already exists."; \
 	fi	
 
-
 .PHONY: push-bng-manifests
 push-bng-manifests:
 	@echo "--> GIT: Forcing full snapshot push of BNG manifests to $(FLUX_BNG_REPO)"
@@ -815,6 +831,24 @@ push-dia-manifests:
 			rm -rf .git && \
 			git init -b $(FLUX_GIT_BRANCH) && \
 			git remote add origin $(DIA_REPO_URL) && \
+			git add -A && \
+			git commit --allow-empty -m "Authoritative snapshot of DIA manifests" && \
+			git config core.sshCommand 'ssh -o IdentitiesOnly=yes -i $(FLUX_SSH_KEY)' && \
+			git push --force origin $(FLUX_GIT_BRANCH) \
+		)
+
+	@echo "--> GIT: Full snapshot push completed"
+
+
+.PHONY: push-dia-grafana
+push-dia-grafana:
+	@echo "--> GIT: Forcing full snapshot push of DIA Grafana Dashboards to $(FLUX_DIA_GRAFANA_REPO)"
+
+	@cd $(DIA_GRAFANA_DIR) && \
+		( \
+			rm -rf .git && \
+			git init -b $(FLUX_GIT_BRANCH) && \
+			git remote add origin $(DIA_GRAFANA_REPO_URL) && \
 			git add -A && \
 			git commit --allow-empty -m "Authoritative snapshot of DIA manifests" && \
 			git config core.sshCommand 'ssh -o IdentitiesOnly=yes -i $(FLUX_SSH_KEY)' && \
