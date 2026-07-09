@@ -145,8 +145,8 @@ DOWNLOAD_TOOLS_LIST := $(KIND) $(KUBECTL) $(HELM) $(KPT) $(K9S) $(YQ) $(GH) $(CL
 # --- Flux & Gitea GitOps Configuration ---
 GITOPS_NAMESPACE ?= nok-git
 GITEA_HOST ?= gitea.nok.local
-GITEA_IP ?= 172.18.0.100
-GITEA_SSH_HOST ?= 172.18.0.102
+GITEA_IP ?= 172.19.0.100
+GITEA_SSH_HOST ?= 172.19.0.102
 GITEA_ADMIN_USER ?= nok
 GITEA_ADMIN_PASS ?= N0kP4ssw0rd
 GITEA_ADMIN_EMAIL ?= nok@example.com
@@ -613,14 +613,14 @@ gitea-add-ssh-key:
 	\
 	SSH_KEY="$$(cat $(FLUX_SSH_KEY).pub)"; \
 	echo "--> SSH: Using Public Key: $$SSH_KEY"; \
-	if $(CURL) --resolve $(GITEA_HOST):80:172.18.0.100 \
+	if $(CURL) --resolve $(GITEA_HOST):80:172.19.0.100 \
 	     -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
 	     http://$(GITEA_HOST)/api/v1/user/keys | \
 	     jq -r '.[].key' | grep -Fxq "$$SSH_KEY"; then \
 		echo "--> GITEA: SSH key already registered, skipping"; \
 	else \
 		echo "--> GITEA: Registering SSH key"; \
-		$(CURL) --resolve $(GITEA_HOST):80:172.18.0.100 -X POST \
+		$(CURL) --resolve $(GITEA_HOST):80:172.19.0.100 -X POST \
 		  -H "Content-Type: application/json" \
 		  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
 		  -d "{\"title\":\"flux ssh key\",\"key\":\"$$SSH_KEY\"}" \

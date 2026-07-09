@@ -139,7 +139,7 @@ Ensure proxy settings are properly configured in the respective package manager 
 
 ### IP Address Segments
 This deployment uses the following network ranges:
-   - 172.18.0.0/24 → KinD cluster and services
+   - 172.19.0.0/24 → KinD cluster and services
    - 172.21.20.0/24 → Containerlab topology
 
 
@@ -176,13 +176,13 @@ NO_PROXY    ?= 127.0.0.1,localhost,::1,.svc,.cluster.local,10.0.0.0/8,172.16.0.0
 Note: BNG cluster details will be automatically updated.
 
 ```bash
-172.18.0.100    gitea.nok.local
+172.19.0.100    gitea.nok.local
 ```
 Example:
 ```bash
 ubuntu@nokia:~/kube_project/NetOpsKube$ cat /etc/hosts
 127.0.0.1 localhost
-172.18.0.100    gitea.nok.local
+172.19.0.100    gitea.nok.local
 ..........
 
 ubuntu@nokia:~/kube_project/NetOpsKube$

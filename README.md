@@ -30,7 +30,7 @@ Docker: Docker must be installed and running, as Kind uses Docker containers for
 - **Nokia SRLinux Image & License (for deploy-bng):**
    - The registry.srlinux.dev/pub/nokia_srsim:25.10.R1 Docker image must be locally available (docker pull registry.srlinux.dev/pub/nokia_srsim:25.10.R1).
    - A valid Nokia SROS license file must be present at the path specified by SRSIM_LICENSE_FILE (default: $(NOK_CLABS_DIR)/nok-bng/srsim-lic-25.txt).
-- **IP Segments:** This deployment uses **172.18.0.0/24** Network for KinD and Services, and **172.21.20.0/24** for containerlab   
+- **IP Segments:** This deployment uses **172.19.0.0/24** Network for KinD and Services, and **172.21.20.0/24** for containerlab   
 
 ### High-Level Functionality
 The Makefile orchestrates several key areas:

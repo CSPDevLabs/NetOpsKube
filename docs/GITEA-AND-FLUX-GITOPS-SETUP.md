@@ -3,7 +3,7 @@
 This guide details the process of establishing a Gitea instance as a Git repository for Flux, followed by the installation and configuration of Flux to manage Kubernetes resources using GitOps principles.
 
 **requirements:**
-- Add  `172.18.0.100    gitea.nok.local` to your `/etc/hosts`
+- Add  `172.19.0.100    gitea.nok.local` to your `/etc/hosts`
 
 ## 1. Gitea Setup
 This section covers the necessary steps to configure your Gitea instance, including user creation, repository setup, and SSH key management.
@@ -59,7 +59,7 @@ curl -X POST \
 Verify that SSH connectivity to Gitea is working correctly using your private key.
 
 ```
-ssh -T -i ~/.ssh/id_ed25519 git@172.18.0.102
+ssh -T -i ~/.ssh/id_ed25519 git@172.19.0.102
 ```
 ## 2. Flux Installation and Configuration
 This section details the installation of the Flux CLI and the configuration of Flux to manage your Kubernetes cluster.
@@ -76,7 +76,7 @@ Bootstrap Flux onto your Kubernetes cluster. This command installs the Flux cont
 
 ```bash
  flux bootstrap git -s \
-  --url=ssh://git@172.18.0.102/nok/flux-bootstrap.git \
+  --url=ssh://git@172.19.0.102/nok/flux-bootstrap.git \
   --private-key-file=$HOME/.ssh/id_ed25519 \
   --branch=main \
   --path=clusters/NetOpsKube
@@ -102,7 +102,7 @@ Create a Kubernetes secret in the flux-system namespace that holds the SSH priva
 
 ```bash
 flux create secret git nok-bng-auth \
-  --url=ssh://git@172.18.0.102/nok/nok-bng-resources.git \
+  --url=ssh://git@172.19.0.102/nok/nok-bng-resources.git \
   --ssh-key-algorithm=ed25519 \
   --private-key-file=$HOME/.ssh/id_ed25519 \
   --namespace=flux-system
@@ -112,7 +112,7 @@ Define a GitRepository source in Flux that points to the nok-bng-resources repos
 
 ```bash
 flux create source git nok-bng-resources \
-  --url=ssh://git@172.18.0.102/nok/nok-bng-resources.git \
+  --url=ssh://git@172.19.0.102/nok/nok-bng-resources.git \
   --branch=main \
   --secret-ref=nok-bng-auth \
   --interval=1m \
