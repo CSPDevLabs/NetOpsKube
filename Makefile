@@ -30,6 +30,10 @@ endif
 KIND_CLUSTER_NAME ?= nok-demo
 KIND_CONFIG_REAL_LOC ?= build/kind-cluster.yaml
 KIND_LAUNCH_CONFIG ?= /tmp/kind-config-$(KIND_CLUSTER_NAME).yaml
+KIND_NET_PREFIX = $(shell \
+docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' \
+	$(KIND_CLUSTER_NAME)-control-plane 2>/dev/null | \
+	awk -F. '{print $$1 "." $$2 "." $$3}')
 
 # Optional: Set API server address if you need to access it from outside Docker
 # KIND_API_SERVER_ADDRESS ?= 127.0.0.1
@@ -91,10 +95,14 @@ SRLINUX_IMAGE ?= registry.srlinux.dev/pub/nokia_srsim:25.10.R1
 SRSIM_LICENSE_FILE ?= $(NOK_CLABS_DIR)/nok-bng/srsim-lic-25.txt
 
 NOK_KPT_DIR ?= $(BASE)/nok-kpt
-KPT_REPO_URL ?= https://github.com/CSPDevLabs/kpt
+KPT_REPO_URL ?= -b mau-nok-dia-package-1 https://github.com/CSPDevLabs/kpt
 
 NOK_CLABS_DIR ?= $(BASE)/nok-clabs
-CLABS_REPO_URL ?= https://github.com/CSPDevLabs/nok-clabs
+CLABS_REPO_URL ?= -b mau-nok-dia-changing-traffic-generator-1 https://github.com/CSPDevLabs/nok-clabs
+
+KIND_PATCH_DIRS := \
+	$(NOK_KPT_DIR) \
+	$(NOK_CLABS_DIR)
 
 NOK_KEYCLOAK_DIR ?= $(BASE)/nok-portal-auth
 KEYCLOAK_REPO_URL ?= https://github.com/CSPDevLabs/nok-portal-auth
@@ -145,8 +153,8 @@ DOWNLOAD_TOOLS_LIST := $(KIND) $(KUBECTL) $(HELM) $(KPT) $(K9S) $(YQ) $(GH) $(CL
 # --- Flux & Gitea GitOps Configuration ---
 GITOPS_NAMESPACE ?= nok-git
 GITEA_HOST ?= gitea.nok.local
-GITEA_IP ?= 172.18.0.100
-GITEA_SSH_HOST ?= 172.18.0.102
+GITEA_IP = $(KIND_NET_PREFIX).100
+GITEA_SSH_HOST = $(KIND_NET_PREFIX).102
 GITEA_ADMIN_USER ?= nok
 GITEA_ADMIN_PASS ?= N0kP4ssw0rd
 GITEA_ADMIN_EMAIL ?= nok@example.com
@@ -167,8 +175,6 @@ FLUX_DIA_GRAFANA_REPO ?= grafana-dashboards
 FLUX_DIA_SECRET ?= nok-dia-auth
 DIA_MANIFESTS_DIR := ./nok-clabs/nok-dia/nok-manifests
 DIA_GRAFANA_DIR := ./nok-clabs/nok-dia/grafana-dashboards
-DIA_REPO_URL := ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_DIA_REPO).git
-DIA_GRAFANA_REPO_URL := ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_DIA_GRAFANA_REPO).git
 
 define GET_GITEA_POD
 $(shell $(KUBECTL) get pods -n $(GITOPS_NAMESPACE) \
@@ -241,7 +247,7 @@ proxy-env: ## Verify proxy environment variables are set
 	@echo "}"
 
 .PHONY: try-nok
-try-nok: check-tools cluster-up git-clone-kpt git-clone-clab install-base-pkg install-lb-pkg install-prom-oper install-gnmic-oper start-ingress-port-forward install-bbm-pkg ## Deploy Base Apps, clone kpt and clab repos, install base packages / load balancer / prometheus and gnmic operators, port forward
+try-nok: check-tools git-clone-kpt git-clone-clab cluster-up install-base-pkg install-lb-pkg install-prom-oper install-gnmic-oper start-ingress-port-forward install-bbm-pkg ## Deploy Base Apps, clone kpt and clab repos, install base packages / load balancer / prometheus and gnmic operators, port forward
 
 .PHONY: try-nok-bng
 try-nok-bng: try-nok install-bng-pkg install-git-pkg configure-auth gitops-init gitops-bng-kustomization ## Deploy BNG and GitOps
@@ -264,32 +270,47 @@ gitops-dia-kustomization: gitea-create-dia-repo gitea-create-dia-grafana-repo fl
 .PHONY: cluster-up
 cluster-up: $(KIND_CONFIG_REAL_LOC) ## Bring up the KinD cluster
 	@echo "--> KIND: Ensuring control-plane exists"
-	@{ \
-		cp $(KIND_CONFIG_REAL_LOC) $(KIND_LAUNCH_CONFIG) ;\
-		if [ ! -z "$(KIND_API_SERVER_ADDRESS)" ]; then \
-			echo "--> KIND: Setting API server address to $(KIND_API_SERVER_ADDRESS)" ;\
-			$(YQ) eval ".networking.apiServerAddress = \"$(KIND_API_SERVER_ADDRESS)\"" -i $(KIND_LAUNCH_CONFIG) ;\
+	@cp $(KIND_CONFIG_REAL_LOC) $(KIND_LAUNCH_CONFIG)
+	@if [ ! -z "$(KIND_API_SERVER_ADDRESS)" ]; then \
+		echo "--> KIND: Setting API server address to $(KIND_API_SERVER_ADDRESS)" ;\
+		$(YQ) eval ".networking.apiServerAddress = \"$(KIND_API_SERVER_ADDRESS)\"" -i $(KIND_LAUNCH_CONFIG) ;\
+	fi
+	@if [[ "$(NO_HOST_PORT_MAPPINGS)" == "yes" ]]; then \
+		echo "--> KIND: Host port maps removed" ;\
+		$(YQ) eval "del(.nodes[0].extraPortMappings)" -i $(KIND_LAUNCH_CONFIG) ;\
+	else \
+		echo "--> KIND: Host port map 0.0.0.0:$(EXT_HTTPS_PORT) added" ;\
+		$(YQ) eval ".nodes[0].extraPortMappings[0].hostPort = $(EXT_HTTPS_PORT)" -i $(KIND_LAUNCH_CONFIG) ;\
+	fi
+	@MATCHED=0 ;\
+	for cluster_name in $$($(KIND) get clusters); do \
+		if [[ "$${cluster_name}" == "$(KIND_CLUSTER_NAME)" ]]; then \
+			MATCHED=1 ;\
 		fi ;\
-		if [[ "$(NO_HOST_PORT_MAPPINGS)" == "yes" ]]; then \
-			echo "--> KIND: Host port maps removed" ;\
-			$(YQ) eval "del(.nodes[0].extraPortMappings)" -i $(KIND_LAUNCH_CONFIG) ;\
-		else \
-			echo "--> KIND: Host port map 0.0.0.0:$(EXT_HTTPS_PORT) added" ;\
-			$(YQ) eval ".nodes[0].extraPortMappings[0].hostPort = $(EXT_HTTPS_PORT)" -i $(KIND_LAUNCH_CONFIG) ;\
-		fi ;\
-		MATCHED=0 ;\
-		for cluster_name in $$($(KIND) get clusters); do \
-			if [[ "$${cluster_name}" == "$(KIND_CLUSTER_NAME)" ]]; then \
-				MATCHED=1 ;\
-			fi ;\
-		done ;\
-		if [[ "$${MATCHED}" == "0" ]]; then \
-			echo "--> KIND: Creating cluster named $(KIND_CLUSTER_NAME)..." ;\
-			$(KIND) create cluster --name $(KIND_CLUSTER_NAME) --config $(KIND_LAUNCH_CONFIG) 2>&1 | $(INDENT_OUT) ;\
-		else \
-			echo "--> KIND: Cluster named $(KIND_CLUSTER_NAME) already exists" ;\
-		fi ;\
-	}
+	done ;\
+	if [[ "$${MATCHED}" == "0" ]]; then \
+		echo "--> KIND: Creating cluster named $(KIND_CLUSTER_NAME)..." ;\
+		$(KIND) create cluster --name $(KIND_CLUSTER_NAME) --config $(KIND_LAUNCH_CONFIG) 2>&1 | $(INDENT_OUT) ;\
+	else \
+		echo "--> KIND: Cluster named $(KIND_CLUSTER_NAME) already exists" ;\
+	fi
+
+	@IP_PREFIX=$$(docker inspect \
+    -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' \
+    $(KIND_CLUSTER_NAME)-control-plane 2>/dev/null | \
+    awk -F. '{print $$1 "." $$2 "." $$3}'); \
+	echo "--> KIND: Replacing 172.18.0 -> $$IP_PREFIX" ;\
+	find $(KIND_PATCH_DIRS) \
+		-type f \
+		\( \
+			-name '*.yaml' -o \
+			-name '*.yml' -o \
+			-name '*.json' -o \
+			-name '*.conf' -o \
+			-name '*.sh' \
+		\) \
+		-exec sed -Ei "s/172\.[0-9]+\.[0-9]+/172.19.0/g" {} \;
+
 
 .PHONY: cluster-wait-for-node-ready
 cluster-wait-for-node-ready: ## Wait for the Kubernetes control plane node to be ready
@@ -655,14 +676,14 @@ gitea-add-ssh-key:
 	\
 	SSH_KEY="$$(cat $(FLUX_SSH_KEY).pub)"; \
 	echo "--> SSH: Using Public Key: $$SSH_KEY"; \
-	if $(CURL) --resolve $(GITEA_HOST):80:172.18.0.100 \
+	if $(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) \
 	     -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
 	     http://$(GITEA_HOST)/api/v1/user/keys | \
 	     jq -r '.[].key' | grep -Fxq "$$SSH_KEY"; then \
 		echo "--> GITEA: SSH key already registered, skipping"; \
 	else \
 		echo "--> GITEA: Registering SSH key"; \
-		$(CURL) --resolve $(GITEA_HOST):80:172.18.0.100 -X POST \
+		$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) -X POST \
 		  -H "Content-Type: application/json" \
 		  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
 		  -d "{\"title\":\"flux ssh key\",\"key\":\"$$SSH_KEY\"}" \
@@ -830,7 +851,7 @@ push-dia-manifests:
 		( \
 			rm -rf .git && \
 			git init -b $(FLUX_GIT_BRANCH) && \
-			git remote add origin $(DIA_REPO_URL) && \
+			git remote add origin ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_DIA_REPO).git && \
 			git add -A && \
 			git commit --allow-empty -m "Authoritative snapshot of DIA manifests" && \
 			git config core.sshCommand 'ssh -o IdentitiesOnly=yes -i $(FLUX_SSH_KEY)' && \
@@ -848,7 +869,7 @@ push-dia-grafana:
 		( \
 			rm -rf .git && \
 			git init -b $(FLUX_GIT_BRANCH) && \
-			git remote add origin $(DIA_GRAFANA_REPO_URL) && \
+			git remote add origin ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_DIA_GRAFANA_REPO).git && \
 			git add -A && \
 			git commit --allow-empty -m "Authoritative snapshot of DIA manifests" && \
 			git config core.sshCommand 'ssh -o IdentitiesOnly=yes -i $(FLUX_SSH_KEY)' && \
