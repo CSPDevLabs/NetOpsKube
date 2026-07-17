@@ -101,8 +101,8 @@ NOK_CLABS_DIR ?= $(BASE)/nok-clabs
 CLABS_REPO_URL ?= -b mau-nok-dia-changing-traffic-generator-1 https://github.com/CSPDevLabs/nok-clabs
 
 KIND_PATCH_DIRS := \
-	$(NOK_KPT_DIR) \
-	$(NOK_CLABS_DIR)
+	$(NOK_KPT_DIR) #\
+#	$(NOK_CLABS_DIR)
 
 NOK_KEYCLOAK_DIR ?= $(BASE)/nok-portal-auth
 KEYCLOAK_REPO_URL ?= https://github.com/CSPDevLabs/nok-portal-auth
