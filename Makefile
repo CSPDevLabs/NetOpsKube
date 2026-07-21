@@ -309,7 +309,7 @@ cluster-up: $(KIND_CONFIG_REAL_LOC) ## Bring up the KinD cluster
 			-name '*.conf' -o \
 			-name '*.sh' \
 		\) \
-		-exec sed -Ei "s/172\.[0-9]+\.[0-9]+/172.19.0/g" {} \;
+		-exec sed -Ei "s/172\.[0-9]+\.[0-9]+/$$IP_PREFIX/g" {} \;
 
 
 .PHONY: cluster-wait-for-node-ready
