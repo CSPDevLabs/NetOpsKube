@@ -2,7 +2,7 @@
 # Gitea and Flux GitOps Setup
 This guide details the process of establishing a Gitea instance as a Git repository for Flux, followed by the installation and configuration of Flux to manage Kubernetes resources using GitOps principles.
 
-**requirements:**
+**Requirements:**
 - Add  `172.18.0.100    gitea.nok.local` to your `/etc/hosts`
 
 ## 1. Gitea Setup
@@ -38,14 +38,14 @@ curl -X POST \
     "private": false,
     "auto_init": true
   }' \
-gitea.nok.local/api/v1/user/repos
+http://gitea.nok.local/api/v1/user/repos
 ```
 
 ### 1.4 Add SSH Public Key to Gitea
 Add your SSH public key to the Gitea user account. This key will be used by Flux to authenticate with Gitea via SSH.
 
 ```bash
-export SSH_PUB_KEY=$(cat ~/.ssh/id_ed25519.pub )
+export SSH_PUB_KEY=$(cat ~/.ssh/flux_ed25519.pub)
 curl -X POST \
   -H "Content-Type: application/json" \
   -u "nok:N0kP4ssw0rd" \
@@ -53,13 +53,13 @@ curl -X POST \
     \"title\": \"flux ssh key\",
     \"key\": \"$SSH_PUB_KEY\"
   }" \
-  gitea.nok.local/api/v1/user/keys
+  http://gitea.nok.local/api/v1/user/keys
 ```
 ### 1.5 Test SSH Connectivity
 Verify that SSH connectivity to Gitea is working correctly using your private key.
 
 ```
-ssh -T -i ~/.ssh/id_ed25519 git@172.18.0.102
+ssh -T -i ~/.ssh/flux_ed25519 git@172.18.0.102
 ```
 ## 2. Flux Installation and Configuration
 This section details the installation of the Flux CLI and the configuration of Flux to manage your Kubernetes cluster.
@@ -77,7 +77,7 @@ Bootstrap Flux onto your Kubernetes cluster. This command installs the Flux cont
 ```bash
  flux bootstrap git -s \
   --url=ssh://git@172.18.0.102/nok/flux-bootstrap.git \
-  --private-key-file=$HOME/.ssh/id_ed25519 \
+  --private-key-file=$HOME/.ssh/flux_ed25519 \
   --branch=main \
   --path=clusters/NetOpsKube
 ``` 
@@ -95,7 +95,7 @@ curl -X POST \
     "private": false,
     "auto_init": true
   }' \
-gitea.nok.local/api/v1/user/repos
+http://gitea.nok.local/api/v1/user/repos
 ```
 ### 2.4 Create Git Secret for BNG Resources
 Create a Kubernetes secret in the flux-system namespace that holds the SSH private key for Flux to authenticate with the nok-bng-resources repository.
@@ -104,7 +104,7 @@ Create a Kubernetes secret in the flux-system namespace that holds the SSH priva
 flux create secret git nok-bng-auth \
   --url=ssh://git@172.18.0.102/nok/nok-bng-resources.git \
   --ssh-key-algorithm=ed25519 \
-  --private-key-file=$HOME/.ssh/id_ed25519 \
+  --private-key-file=$HOME/.ssh/flux_ed25519 \
   --namespace=flux-system
 ```
 ### 2.5 Create Git Repository Source for BNG Resources
@@ -120,7 +120,13 @@ flux create source git nok-bng-resources \
 ```
 
 ### 2.6 Populate BNG Repository and Create Kustomizations
-After populating the nok-bng-resources repository with your BNG configurations (e.g., using `./resources/gitea/populate-git-bng-repo.sh`), create Kustomization resources in Flux for each subdirectory within the repository. This instructs Flux to apply the Kubernetes manifests found in these paths.
+Populate and push the BNG manifests from this repository using the built-in Makefile target:
+
+```bash
+make push-bng-manifests
+```
+
+Then create Kustomization resources in Flux for each subdirectory in `nok-clabs/nok-bng/nok-manifests`.
 
 Navigate to the root folder of your `nok-bng-resources` repository clone:
 
