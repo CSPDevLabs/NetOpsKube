@@ -89,6 +89,11 @@ gitops-init: gitea-create-admin gitea-create-flux-repo gitea-add-ssh-key  flux-b
 generate-portal-pv:
 	@echo "--> PORTAL: Syncing portal files into Kind node"
 	@if [ "$(KEYCLOAK_ENABLED)" = "YES" ]; then \
+	    if [ ! -d "./nok-portal-auth" ]; then \
+			$(MAKE) clone-keycloak-repo; \
+		else \
+			echo "--> GIT: ./nok-portal-auth already exists. Skipping clone."; \
+		fi; \
 		echo "--> PORTAL: Using Keycloak portal"; \
 		docker exec $(KIND_CLUSTER_NAME)-control-plane rm -rf /portal; \
 		docker exec $(KIND_CLUSTER_NAME)-control-plane mkdir -p /portal; \
