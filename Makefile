@@ -78,7 +78,7 @@ proxy-env: ## Verify proxy environment variables are set
 
 ## Deploy Base Apps, clone kpt and clab repos, install base packages / load balancer / prometheus and gnmic operators, port forward
 .PHONY: try-nok
-try-nok: check-tools cluster-up cluster-wait-for-node-ready generate-portal-pv git-clone-kpt git-clone-clab install-base-pkg install-lb-pkg install-prom-oper install-gnmic-oper start-ingress-port-forward install-bbm-pkg install-base-final configure-auth
+try-nok: check-tools cluster-up cluster-wait-for-node-ready git-clone-kpt generate-portal-pv git-clone-clab install-base-pkg install-lb-pkg install-prom-oper install-gnmic-oper start-ingress-port-forward install-bbm-pkg install-base-final configure-auth
 
 ## Create Gitea admin, create Flux repo, add SSH key, bootstrap Flux
 .PHONY: gitops-init
