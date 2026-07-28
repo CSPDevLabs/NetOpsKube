@@ -16,7 +16,7 @@
 
 
 # Optional: Set to 'YES' to onboard Keycloak, otherwise 'NO'
-KEYCLOAK_ENABLED ?= YES
+KEYCLOAK_ENABLED ?= NO
 
 NOK_KEYCLOAK_DIR ?= $(BASE)/nok-portal-auth
 KEYCLOAK_REPO_URL ?= https://github.com/CSPDevLabs/nok-portal-auth
