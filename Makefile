@@ -176,7 +176,7 @@ help: ## Display this help message
 git-clone-kpt: ## Clones the CSPDevLabs/kpt repository into ./nok-kpt
 	@echo "--> GIT: Cloning $(KPT_REPO_URL) into $(NOK_KPT_DIR)"
 	@if [ ! -d "$(NOK_KPT_DIR)" ]; then \
-		git clone -b mau-nok-dia-package-1 $(KPT_REPO_URL) $(NOK_KPT_DIR) ;\
+		git clone -b nok-restructure $(KPT_REPO_URL) $(NOK_KPT_DIR) ;\
 	else \
 		echo "--> GIT: $(NOK_KPT_DIR) already exists. Skipping clone." ;\
 	fi
@@ -185,7 +185,7 @@ git-clone-kpt: ## Clones the CSPDevLabs/kpt repository into ./nok-kpt
 git-clone-clab: ## Clones the CSPDevLabs/nok-clabs repository into ./nok-clabs
 	@echo "--> GIT: Cloning $(CLABS_REPO_URL) into $(NOK_CLABS_DIR)"
 	@if [ ! -d "$(NOK_CLABS_DIR)" ]; then \
-		git clone -b mau-nok-dia-changing-traffic-generator-1 $(CLABS_REPO_URL) $(NOK_CLABS_DIR) ;\
+		git clone -b nok-restructure $(CLABS_REPO_URL) $(NOK_CLABS_DIR) ;\
 	else \
 		echo "--> GIT: $(NOK_CLABS_DIR) already exists. Skipping clone." ;\
 	fi

@@ -20,7 +20,7 @@ KEYCLOAK_ENABLED ?= NO
 
 NOK_KEYCLOAK_DIR ?= $(BASE)/nok-portal-auth
 KEYCLOAK_REPO_URL ?= https://github.com/CSPDevLabs/nok-portal-auth
-KEYCLOAK_REPO_BRANCH ?= keycloak
+KEYCLOAK_REPO_BRANCH ?= nok-restructure
 KEYCLOAK_DIR ?= $(BASE)/nok-portal-auth/keycloak
 OAUTH2_PROXY_DIR  ?= $(BASE)/nok-portal-auth/oauth2-proxy
 
