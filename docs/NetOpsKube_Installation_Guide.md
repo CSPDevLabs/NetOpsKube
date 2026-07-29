@@ -138,9 +138,17 @@ Ensure proxy settings are properly configured in the respective package manager 
    - A valid Nokia SROS license file must be present at the path specified by SRSIM_LICENSE_FILE. Default path is $(NOK_CLABS_DIR)/nok-bng/srsim-lic-25.txt
 
 ### IP Address Segments
-This deployment uses the following network ranges:
-   - 172.18.0.0/24 → KinD cluster and services
-   - 172.21.20.0/24 → Containerlab topology
+| Network | Range | Notes |
+|---------|-------|-------|
+| KinD Docker (MetalLB/LB) | auto-detected `/24` | Patched from `172.18.0.x` template at `make cluster-up` |
+| KinD pods | `10.244.0.0/16` | Fixed in `build/kind-cluster.yaml` |
+| KinD services | `10.96.0.0/12` | Fixed in `build/kind-cluster.yaml` |
+| Containerlab (BNG) | `172.21.20.0/24` | Separate Docker network |
+
+After `make cluster-up`, check the detected LB prefix:
+```bash
+make patch-kpt-lb-ips   # shows prefix; re-patches nok-kpt if needed
+```
 
 
 ### Makefile Updates
@@ -171,12 +179,16 @@ HTTPS_PROXY ?= http://<proxy-ip>:<port>
 NO_PROXY    ?= 127.0.0.1,localhost,::1,.svc,.cluster.local,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,10.96.0.0/12,10.244.0.0/16,.nok.local,gitea.nok.local
 ```
 
-### Update Gitea IP on /etc/hosts. 
+### Update /etc/hosts for browser access
 
-Note: BNG cluster details will be automatically updated.
+Use port-forward (`:8080`) or the detected MetalLB ingress IP. After `make cluster-up`, the ingress IP is `<kinD-prefix>.100` (e.g. `172.19.0.100`).
 
 ```bash
-172.18.0.100    gitea.nok.local
+# Option A — port-forward (recommended for browser access)
+127.0.0.1 bng.nok.local gitea.nok.local
+
+# Option B — direct MetalLB IP (shown in make cluster-up output)
+<kinD-prefix>.100 bng.nok.local gitea.nok.local
 ```
 Example:
 ```bash

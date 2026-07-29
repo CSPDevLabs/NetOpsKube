@@ -3,7 +3,8 @@
 This guide details the process of establishing a Gitea instance as a Git repository for Flux, followed by the installation and configuration of Flux to manage Kubernetes resources using GitOps principles.
 
 **requirements:**
-- Add  `172.18.0.100    gitea.nok.local` to your `/etc/hosts`
+- Add `127.0.0.1 bng.nok.local` to `/etc/hosts` (browser access via ingress port-forward on `:8080`)
+- Gitea is served under the same portal host: `http://bng.nok.local:8080/gitea/`
 
 ## 1. Gitea Setup
 This section covers the necessary steps to configure your Gitea instance, including user creation, repository setup, and SSH key management.

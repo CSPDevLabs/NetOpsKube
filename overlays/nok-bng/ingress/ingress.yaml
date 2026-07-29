@@ -1,0 +1,49 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nok-apps-ingress
+  namespace: nok-bng
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/use-regex: "true"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: bng.nok.local # kpt-set: ${ingress-host}
+    http:
+      paths:     
+      - path: /prometheus(/|$)(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: prometheus-operated
+            port:
+              number: 9090
+      - path: /grafana(/|$)(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: grafana-service
+            port:
+              number: 3000            
+      - path: /alertmanager(/|$)(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: alertmanager-operated
+            port:
+              number: 9093
+      - path: /bbm(/|$)(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: bbm-grafana-proxy
+            port:
+              number: 80
+      - path: /gitea(/|$)(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: gitea-proxy
+            port:
+              number: 3000
