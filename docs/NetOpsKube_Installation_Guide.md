@@ -374,7 +374,11 @@ sudo docker exec -it clab-sros-bngt-bngblaster bash -c 'bngblaster -C pppoe.json
  ```
 
 ## Open portal
-Add entries for "bng.nok.local" and "gitea.nok.local" in the /etc/hosts file of your local machine (e.g., your Windows laptop), mapping them to the IP address of the Ubuntu host. This allows your browser to resolve the URLs correctly.
+Add `bng.nok.local` to the `/etc/hosts` file of your local machine (e.g., your Windows laptop), mapping it to the IP address of the Ubuntu host. This allows your browser to resolve the URLs correctly.
+
+```bash
+127.0.0.1 bng.nok.local
+```
 
 ### NOK Portal
 http://bng.nok.local:8080/login
@@ -386,11 +390,16 @@ Username: admin
 Password: admin123
 ```
 
-### Gitea Portal
-http://gitea.nok.local:8080
+### Gitea (GitOps)
 
-Login Credentials:
+Gitea is served under the same portal host.
+
+- Direct URL: http://bng.nok.local:8080/gitea/
+- Or from the portal menu: **Gitea** → `/gitea/nok/nok-bng-resources`
+
+Login credentials:
+
 ```bash
-email: nok@example.com
-password "N0kP4ssw0rd"
+Username: nok
+Password: N0kP4ssw0rd
 ```
