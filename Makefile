@@ -31,6 +31,8 @@ KIND_CLUSTER_NAME ?= nok-demo
 KIND_CONFIG_REAL_LOC ?= build/kind-cluster.yaml
 KIND_LAUNCH_CONFIG ?= /tmp/kind-config-$(KIND_CLUSTER_NAME).yaml
 # Template LB prefix baked into nok-kpt; patched at cluster-up to match KinD's Docker network.
+# Interim approach: broad sed patch under nok-kpt. Longer term, align with kpt apply-setters
+# (see CSPDevLabs/kpt#27) and Makefile simplification — coordinate with Anushree.
 KIND_LB_DEFAULT_PREFIX ?= 172.18.0
 KIND_NET_PREFIX = $(shell docker inspect \
 	-f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' \

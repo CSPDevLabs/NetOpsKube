@@ -140,7 +140,7 @@ Ensure proxy settings are properly configured in the respective package manager 
 ### IP Address Segments
 | Network | Range | Notes |
 |---------|-------|-------|
-| KinD Docker (MetalLB/LB) | auto-detected `/24` | Patched from `172.18.0.x` template at `make cluster-up` |
+| KinD Docker (MetalLB/LB) | auto-detected `/24` | Patched from `172.18.0.x` template at `make cluster-up` (see `make patch-kpt-lb-ips`) |
 | KinD pods | `10.244.0.0/16` | Fixed in `build/kind-cluster.yaml` |
 | KinD services | `10.96.0.0/12` | Fixed in `build/kind-cluster.yaml` |
 | Containerlab (BNG) | `172.21.20.0/24` | Separate Docker network |
@@ -181,20 +181,22 @@ NO_PROXY    ?= 127.0.0.1,localhost,::1,.svc,.cluster.local,10.0.0.0/8,172.16.0.0
 
 ### Update /etc/hosts for browser access
 
-Use port-forward (`:8080`) or the detected MetalLB ingress IP. After `make cluster-up`, the ingress IP is `<kinD-prefix>.100` (e.g. `172.19.0.100`).
+Use port-forward (`:8080`) on the deploy host. A single hostname is enough for portal and Gitea:
 
 ```bash
-# Option A — port-forward (recommended for browser access)
-127.0.0.1 bng.nok.local gitea.nok.local
+127.0.0.1 bng.nok.local
+```
 
-# Option B — direct MetalLB IP (shown in make cluster-up output)
-<kinD-prefix>.100 bng.nok.local gitea.nok.local
+For direct MetalLB ingress access (without port-forward), use the detected KinD prefix (e.g. `172.19.0.100`):
+
+```bash
+<kinD-prefix>.100 bng.nok.local
 ```
 Example:
 ```bash
 ubuntu@nokia:~/kube_project/NetOpsKube$ cat /etc/hosts
 127.0.0.1 localhost
-172.18.0.100    gitea.nok.local
+127.0.0.1 bng.nok.local
 ..........
 
 ubuntu@nokia:~/kube_project/NetOpsKube$
