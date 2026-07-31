@@ -35,7 +35,7 @@ gitops-dia-kustomization: gitea-create-dia-repo gitea-create-dia-grafana-repo fl
 deploy-clab-dia: check-tools git-clone-clab check-clab-prerequisites ## Deploys the Containerlab DIA topology
 	@echo "--> CLAB: Deploying DIA topology from $(NOK_CLABS_DIR)/nok-dia"
 	@if [ -d "$(NOK_CLABS_DIR)/nok-dia" ]; then \
-		cd $(NOK_CLABS_DIR)/nok-dia && $(CLAB) deploy -t topo.yaml ;\
+		cd $(NOK_CLABS_DIR)/nok-dia && $(CLAB) deploy -t topo.clab.yaml ;\
 	else \
 		echo "Error: $(NOK_CLABS_DIR)/nok-dia directory not found. Please ensure the nok-clabs repository is cloned and contains the nok-dia subdirectory." ;\
 		exit 1 ;\
@@ -45,7 +45,7 @@ deploy-clab-dia: check-tools git-clone-clab check-clab-prerequisites ## Deploys 
 destroy-clab-dia: check-tools git-clone-clab ## Destroys the Containerlab DIA topology and cleans up
 	@echo "--> CLAB: Destroying DIA topology from $(NOK_CLABS_DIR)/nok-dia"
 	@if [ -d "$(NOK_CLABS_DIR)/nok-dia" ]; then \
-		cd $(NOK_CLABS_DIR)/nok-dia && $(CLAB) destroy --cleanup -t topo.yaml ;\
+		cd $(NOK_CLABS_DIR)/nok-dia && $(CLAB) destroy --cleanup -t topo.clab.yaml ;\
 	else \
 		echo "Error: $(NOK_CLABS_DIR)/nok-dia directory not found. Please ensure the nok-clabs repository is cloned and contains the nok-dia subdirectory." ;\
 		exit 1 ;\
