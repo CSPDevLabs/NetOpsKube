@@ -30,10 +30,7 @@ endif
 KIND_CLUSTER_NAME ?= nok-demo
 KIND_CONFIG_REAL_LOC ?= build/kind-cluster.yaml
 KIND_LAUNCH_CONFIG ?= /tmp/kind-config-$(KIND_CLUSTER_NAME).yaml
-# Template LB prefix baked into nok-kpt; patched at cluster-up to match KinD's Docker network.
-# Interim approach: broad sed patch under nok-kpt. Longer term, align with kpt apply-setters
-# (see CSPDevLabs/kpt#27) and Makefile simplification — coordinate with Anushree.
-KIND_LB_DEFAULT_PREFIX ?= 172.18.0
+# KinD Docker network prefix (e.g. 172.18.0). LB IP setters live in nok-kpt apply-setters.yaml (kpt#27).
 KIND_NET_PREFIX = $(shell docker inspect \
 	-f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' \
 	$(KIND_CLUSTER_NAME)-control-plane 2>/dev/null | \
@@ -103,9 +100,6 @@ KPT_REPO_URL ?= https://github.com/CSPDevLabs/kpt
 
 NOK_CLABS_DIR ?= $(BASE)/nok-clabs
 CLABS_REPO_URL ?= https://github.com/CSPDevLabs/nok-clabs
-
-# KPT packages patched after KinD comes up (MetalLB pool + LoadBalancer IPs).
-KIND_PATCH_DIRS ?= $(NOK_KPT_DIR)
 
 NOK_KEYCLOAK_DIR ?= $(BASE)/nok-portal-auth
 KEYCLOAK_REPO_URL ?= https://github.com/CSPDevLabs/nok-portal-auth
@@ -324,27 +318,6 @@ cluster-up: $(KIND_CONFIG_REAL_LOC) ## Bring up the KinD cluster
 			echo "--> KIND: Cluster named $(KIND_CLUSTER_NAME) already exists" ;\
 		fi ;\
 	}
-	@$(MAKE) patch-kpt-lb-ips
-
-.PHONY: patch-kpt-lb-ips
-patch-kpt-lb-ips: ## Reset and patch MetalLB/LB IPs in nok-kpt to match KinD Docker network
-	@IP_PREFIX="$(KIND_NET_PREFIX)" ;\
-	if [ -z "$$IP_PREFIX" ]; then \
-		echo "Error: KinD cluster '$(KIND_CLUSTER_NAME)' not found — cannot detect network prefix" ;\
-		exit 1 ;\
-	fi ;\
-	echo "--> KIND: KinD LB network prefix is $$IP_PREFIX (template: $(KIND_LB_DEFAULT_PREFIX))" ;\
-	if [ ! -d "$(NOK_KPT_DIR)" ]; then \
-		echo "Error: $(NOK_KPT_DIR) not found — run 'make git-clone-kpt' first" ;\
-		exit 1 ;\
-	fi ;\
-	if [ "$$IP_PREFIX" = "$(KIND_LB_DEFAULT_PREFIX)" ]; then \
-		echo "--> KIND: Prefix matches template, no patch needed" ;\
-		exit 0 ;\
-	fi ;\
-	echo "--> KIND: Patching $(KIND_LB_DEFAULT_PREFIX) -> $$IP_PREFIX under $(KIND_PATCH_DIRS)" ;\
-	find $(KIND_PATCH_DIRS) -type f \( -name '*.yaml' -o -name '*.yml' \) \
-		-exec sed -i 's/$(KIND_LB_DEFAULT_PREFIX)/'"$$IP_PREFIX"'/g' {} +
 
 .PHONY: cluster-wait-for-node-ready
 cluster-wait-for-node-ready: ## Wait for the Kubernetes control plane node to be ready

@@ -140,14 +140,15 @@ Ensure proxy settings are properly configured in the respective package manager 
 ### IP Address Segments
 | Network | Range | Notes |
 |---------|-------|-------|
-| KinD Docker (MetalLB/LB) | auto-detected `/24` | Patched from `172.18.0.x` template at `make cluster-up` (see `make patch-kpt-lb-ips`) |
+| KinD Docker (MetalLB/LB) | `172.18.0.x` default | Set via kpt `apply-setters.yaml` ([kpt#27](https://github.com/CSPDevLabs/kpt/pull/27)); Makefile simplification in progress |
 | KinD pods | `10.244.0.0/16` | Fixed in `build/kind-cluster.yaml` |
 | KinD services | `10.96.0.0/12` | Fixed in `build/kind-cluster.yaml` |
 | Containerlab (BNG) | `172.21.20.0/24` | Separate Docker network |
 
-After `make cluster-up`, check the detected LB prefix:
+After deploy, verify ingress and Gitea reachability:
+
 ```bash
-make patch-kpt-lb-ips   # shows prefix; re-patches nok-kpt if needed
+make verify-lb-ips
 ```
 
 
