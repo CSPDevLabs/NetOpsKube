@@ -30,7 +30,7 @@ Docker: Docker must be installed and running, as Kind uses Docker containers for
 - **Nokia SRLinux Image & License (for deploy-bng):**
    - The registry.srlinux.dev/pub/nokia_srsim:25.10.R1 Docker image must be locally available (docker pull registry.srlinux.dev/pub/nokia_srsim:25.10.R1).
    - A valid Nokia SROS license file must be present at the path specified by SRSIM_LICENSE_FILE (default: $(NOK_CLABS_DIR)/nok-bng/srsim-lic-25.txt).
-- **IP Segments:** KinD picks its Docker network at runtime (e.g. `172.18.0.0/24` or `172.19.0.0/16`). MetalLB and LoadBalancer IPs in `nok-kpt` use `172.18.0.x` defaults and are configured via kpt setters ([kpt#27](https://github.com/CSPDevLabs/kpt/pull/27)). Pod (`10.244.0.0/16`) and service (`10.96.0.0/12`) subnets are fixed in `build/kind-cluster.yaml`. Containerlab uses **172.21.20.0/24** (BNG) on a separate Docker network.
+- **IP Segments:** KinD picks its Docker network at runtime (e.g. `172.18.0.0/24` or `172.19.0.0/16`). MetalLB and LoadBalancer IPs in `nok-kpt` are templated on `172.18.0.x` and **auto-patched** by `make cluster-up` to match the KinD node prefix. Pod (`10.244.0.0/16`) and service (`10.96.0.0/12`) subnets are fixed in `build/kind-cluster.yaml`. Containerlab uses **172.21.20.0/24** (BNG) on a separate Docker network.
 
 ### High-Level Functionality
 The Makefile orchestrates several key areas:
