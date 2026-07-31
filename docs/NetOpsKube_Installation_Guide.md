@@ -151,16 +151,12 @@ The Makefile orchestrates several key areas:
 - **Tool Management:** It automatically downloads, installs, and manages versions of essential command-line tools like kind, kubectl, helm, kpt, yq, k9s, gh, and containerlab into a dedicated tools/ directory.
 - **sudo Access:** Needs sudo privileges for containerlab
 - **Kubernetes Cluster Lifecycle (Kind):** It provides targets to create, configure, and delete a local Kubernetes cluster using Kind, including dynamic configuration of API server addresses and port mappings.
-- ***Git Repository Management:** It handles the cloning of specific Git repositories (**CSPDevLabs/kpt** and **CSPDevLabs/nok-clabs**) which contain the Kubernetes manifests and Containerlab topologies.
+- **Git Repository Management:** It handles the cloning of specific Git repositories (**CSPDevLabs/kpt** and **CSPDevLabs/nok-clabs**) which contain the Kubernetes manifests and Containerlab topologies.
 - **KPT Package Deployment:** It defines a macro (INSTALL_KPT_PACKAGE) to simplify the deployment and reconciliation of Kubernetes resource packages using kpt live apply, ensuring applications are correctly installed and managed within the cluster.
 - **Containerlab Integration:** It includes targets to deploy and destroy network topologies defined in Containerlab, specifically for a Nokia BNG (Broadband Network Gateway) setup, and checks for necessary Docker images and license files.
 - **Service Exposure:** It includes a mechanism to port-forward the ingress controller service, making applications accessible from the host machine.
 
-Add below line at the beginning of the Makefile if you are using Linux environment.
-
-```bash
-SHELL := /bin/bash
-```
+The current Makefile already sets `SHELL := /bin/bash` automatically for supported Linux distributions and macOS.
 #### Proxy Configuration
 In environments where outbound internet access is restricted, you may need to configure HTTP/HTTPS proxy settings for certain workloads.
  
@@ -296,9 +292,9 @@ make destroy-clab-bng
 ```
 
 ### Update portal username/password
-Update NOK portal credentials using below command.
+If Keycloak is enabled (`KEYCLOAK_ENABLED=YES`), apply authentication components using:
 ```bash
-make update-portal-auth
+make configure-auth
 ```
 
 ##  Verify whether all pods are in 'Running' state.
