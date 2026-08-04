@@ -71,7 +71,7 @@ restart-gnmic-collector: $(KUBECTL) ## Restart gNMIc collector pods in BNG_NAMES
 	@echo "--> GNMIC: Run 'make verify-gnmic-subscriptions' once pods are Ready to confirm recovery."
 
 .PHONY: verify-lb-ips
-verify-lb-ips: $(KUBECTL) ## Verify KinD LB prefix, nok-kpt patch, MetalLB ingress IP, and Gitea API reachability
+verify-lb-ips: $(KUBECTL) ## Verify KinD LB prefix, cluster LoadBalancer IPs, and Gitea API reachability
 	@IP_PREFIX="$(KIND_NET_PREFIX)" ;\
 	EXPECTED_INGRESS="$(KIND_NET_PREFIX).100" ;\
 	EXPECTED_GITEA_SSH="$(KIND_NET_PREFIX).102" ;\
@@ -90,27 +90,23 @@ verify-lb-ips: $(KUBECTL) ## Verify KinD LB prefix, nok-kpt patch, MetalLB ingre
 	else \
 		echo "[PASS] GITEA_SSH_HOST=$(GITEA_SSH_HOST)" ;\
 	fi ;\
-	for f in \
-		"$(NOK_KPT_DIR)/nok-lb/metallb-config/addresspool.yaml" \
-		"$(NOK_KPT_DIR)/nok-base/ingress/deploy.yaml" \
-		"$(NOK_KPT_DIR)/nok-git/gitea/gitea-ssh-service.yaml" ; do \
-		if [ ! -f "$$f" ]; then \
-			echo "[FAIL] Missing $$f — run 'make git-clone-kpt'" ; FAIL=1 ;\
-		elif ! grep -q "$$IP_PREFIX" "$$f"; then \
-			echo "[FAIL] $$f not patched for $$IP_PREFIX" ; FAIL=1 ;\
+	for svc_check in \
+		"nok-base:ingress-nginx-controller:$$EXPECTED_INGRESS" \
+		"nok-git:gitea-ssh:$$EXPECTED_GITEA_SSH" ; do \
+		ns=$${svc_check%%:*} ; rest=$${svc_check#*:} ;\
+		svc=$${rest%%:*} ; expected=$${rest#*:} ;\
+		LB_IP=$$($(KUBECTL) get svc -n $$ns $$svc \
+			-o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null) ;\
+		if [ -z "$$LB_IP" ]; then \
+			echo "[WARN] $$ns/$$svc LoadBalancer IP not assigned yet" ; FAIL=1 ;\
+		elif [ "$$LB_IP" != "$$expected" ]; then \
+			echo "[FAIL] $$ns/$$svc LB $$LB_IP expected $$expected" ; FAIL=1 ;\
 		else \
-			echo "[PASS] $$f patched" ;\
+			echo "[PASS] $$ns/$$svc LoadBalancer IP $$LB_IP" ;\
 		fi ;\
 	done ;\
 	LB_IP=$$($(KUBECTL) get svc -n nok-base ingress-nginx-controller \
 		-o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null) ;\
-	if [ -z "$$LB_IP" ]; then \
-		echo "[WARN] Ingress LoadBalancer IP not assigned yet" ; FAIL=1 ;\
-	elif [ "$$LB_IP" != "$$EXPECTED_INGRESS" ]; then \
-		echo "[FAIL] Ingress LB $$LB_IP expected $$EXPECTED_INGRESS" ; FAIL=1 ;\
-	else \
-		echo "[PASS] Ingress LoadBalancer IP $$LB_IP" ;\
-	fi ;\
 	if [ -n "$$LB_IP" ]; then \
 		if $(CURL) --resolve $(GITEA_HOST):80:$$LB_IP \
 			-u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \

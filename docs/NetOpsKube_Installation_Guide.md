@@ -140,14 +140,14 @@ Ensure proxy settings are properly configured in the respective package manager 
 ### IP Address Segments
 | Network | Range | Notes |
 |---------|-------|-------|
-| KinD Docker (MetalLB/LB) | auto-detected `/24` | Setter values in `nok-kpt/*/apply-setters.yaml` updated at `make cluster-up` (see `make update-kpt-lb-setters`) |
+| KinD Docker (MetalLB/LB) | auto-detected `/24` | LB setters applied at package install via `kpt fn eval` when prefix ≠ `172.18.0` (see `make show-kind-lb-setters`, [kpt#27](https://github.com/CSPDevLabs/kpt/pull/27)) |
 | KinD pods | `10.244.0.0/16` | Fixed in `build/kind-cluster.yaml` |
 | KinD services | `10.96.0.0/12` | Fixed in `build/kind-cluster.yaml` |
 | Containerlab (BNG) | `172.21.20.0/24` | Separate Docker network |
 
 After `make cluster-up`, check the detected LB prefix:
 ```bash
-make update-kpt-lb-setters   # shows prefix; updates apply-setters.yaml if needed
+make show-kind-lb-setters   # shows detected prefix and kpt fn eval setter args
 ```
 
 
