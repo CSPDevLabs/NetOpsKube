@@ -30,9 +30,7 @@ endif
 KIND_CLUSTER_NAME ?= nok-demo
 KIND_CONFIG_REAL_LOC ?= build/kind-cluster.yaml
 KIND_LAUNCH_CONFIG ?= /tmp/kind-config-$(KIND_CLUSTER_NAME).yaml
-# Template LB prefix baked into nok-kpt; patched at cluster-up to match KinD's Docker network.
-# Interim approach: broad sed patch under nok-kpt. Longer term, align with kpt apply-setters
-# (see CSPDevLabs/kpt#27) and Makefile simplification — coordinate with Anushree.
+# KinD Docker network prefix (e.g. 172.18.0). LB IPs are set via nok-kpt apply-setters.yaml (kpt#27).
 KIND_LB_DEFAULT_PREFIX ?= 172.18.0
 KIND_NET_PREFIX = $(shell docker inspect \
 	-f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' \
@@ -100,12 +98,10 @@ SRSIM_LICENSE_FILE ?= $(NOK_CLABS_DIR)/nok-bng/srsim-lic-25.txt
 
 NOK_KPT_DIR ?= $(BASE)/nok-kpt
 KPT_REPO_URL ?= https://github.com/CSPDevLabs/kpt
+KPT_REPO_BRANCH ?= feat/ip-setters
 
 NOK_CLABS_DIR ?= $(BASE)/nok-clabs
 CLABS_REPO_URL ?= https://github.com/CSPDevLabs/nok-clabs
-
-# KPT packages patched after KinD comes up (MetalLB pool + LoadBalancer IPs).
-KIND_PATCH_DIRS ?= $(NOK_KPT_DIR)
 
 NOK_KEYCLOAK_DIR ?= $(BASE)/nok-portal-auth
 KEYCLOAK_REPO_URL ?= https://github.com/CSPDevLabs/nok-portal-auth
@@ -324,27 +320,31 @@ cluster-up: $(KIND_CONFIG_REAL_LOC) ## Bring up the KinD cluster
 			echo "--> KIND: Cluster named $(KIND_CLUSTER_NAME) already exists" ;\
 		fi ;\
 	}
-	@$(MAKE) patch-kpt-lb-ips
+	@$(MAKE) update-kpt-lb-setters
 
-.PHONY: patch-kpt-lb-ips
-patch-kpt-lb-ips: ## Reset and patch MetalLB/LB IPs in nok-kpt to match KinD Docker network
+.PHONY: update-kpt-lb-setters
+update-kpt-lb-setters: $(YQ) ## Update nok-kpt apply-setters.yaml LB IPs to match KinD Docker network
 	@IP_PREFIX="$(KIND_NET_PREFIX)" ;\
 	if [ -z "$$IP_PREFIX" ]; then \
 		echo "Error: KinD cluster '$(KIND_CLUSTER_NAME)' not found — cannot detect network prefix" ;\
 		exit 1 ;\
 	fi ;\
-	echo "--> KIND: KinD LB network prefix is $$IP_PREFIX (template: $(KIND_LB_DEFAULT_PREFIX))" ;\
 	if [ ! -d "$(NOK_KPT_DIR)" ]; then \
 		echo "Error: $(NOK_KPT_DIR) not found — run 'make git-clone-kpt' first" ;\
 		exit 1 ;\
 	fi ;\
+	echo "--> KIND: KinD LB network prefix is $$IP_PREFIX (template: $(KIND_LB_DEFAULT_PREFIX))" ;\
 	if [ "$$IP_PREFIX" = "$(KIND_LB_DEFAULT_PREFIX)" ]; then \
-		echo "--> KIND: Prefix matches template, no patch needed" ;\
+		echo "--> KIND: Prefix matches template, apply-setters defaults are correct" ;\
 		exit 0 ;\
 	fi ;\
-	echo "--> KIND: Patching $(KIND_LB_DEFAULT_PREFIX) -> $$IP_PREFIX under $(KIND_PATCH_DIRS)" ;\
-	find $(KIND_PATCH_DIRS) -type f \( -name '*.yaml' -o -name '*.yml' \) \
-		-exec sed -i 's/$(KIND_LB_DEFAULT_PREFIX)/'"$$IP_PREFIX"'/g' {} +
+	echo "--> KIND: Updating apply-setters.yaml LB values for prefix $$IP_PREFIX" ;\
+	$(YQ) eval '.data."metallb-pool-range" = "'$$IP_PREFIX'.100-'$$IP_PREFIX'.120"' -i $(NOK_KPT_DIR)/nok-lb/apply-setters.yaml ;\
+	$(YQ) eval '.data."ingress-lb-ip" = "'$$IP_PREFIX'.100"' -i $(NOK_KPT_DIR)/nok-base/apply-setters.yaml ;\
+	$(YQ) eval '.data."syslog-lb-ip" = "'$$IP_PREFIX'.101"' -i $(NOK_KPT_DIR)/nok-bng/apply-setters.yaml ;\
+	$(YQ) eval '.data."syslog-lb-ip" = "'$$IP_PREFIX'.103"' -i $(NOK_KPT_DIR)/nok-dia/apply-setters.yaml ;\
+	$(YQ) eval '.data."gitea-ssh-lb-ip" = "'$$IP_PREFIX'.102"' -i $(NOK_KPT_DIR)/nok-git/apply-setters.yaml ;\
+	$(YQ) eval '.data."blackbox-lb-ip" = "'$$IP_PREFIX'.111"' -i $(NOK_KPT_DIR)/nok-bbm/apply-setters.yaml
 
 .PHONY: cluster-wait-for-node-ready
 cluster-wait-for-node-ready: ## Wait for the Kubernetes control plane node to be ready
@@ -428,12 +428,13 @@ $(FLUX): | $(BASE) $(TOOLS) ; $(info --> TOOLS: Ensuring flux is present in $(FL
 
 # --- Git Clone Targets ---
 .PHONY: git-clone-kpt
-git-clone-kpt: ## Clones the CSPDevLabs/kpt repository into ./nok-kpt
-	@echo "--> GIT: Cloning $(KPT_REPO_URL) into $(NOK_KPT_DIR)"
+git-clone-kpt: ## Clones the CSPDevLabs/kpt repository into ./nok-kpt (branch: feat/ip-setters)
+	@echo "--> GIT: Cloning $(KPT_REPO_URL) ($(KPT_REPO_BRANCH)) into $(NOK_KPT_DIR)"
 	@if [ ! -d "$(NOK_KPT_DIR)" ]; then \
-		git clone $(KPT_REPO_URL) $(NOK_KPT_DIR) ;\
+		git clone -b $(KPT_REPO_BRANCH) $(KPT_REPO_URL) $(NOK_KPT_DIR) ;\
 	else \
 		echo "--> GIT: $(NOK_KPT_DIR) already exists. Skipping clone." ;\
+		echo "--> GIT: Ensure branch $(KPT_REPO_BRANCH) is checked out (override with NOK_KPT_DIR for a local kpt checkout)." ;\
 	fi
 
 .PHONY: git-clone-clab
