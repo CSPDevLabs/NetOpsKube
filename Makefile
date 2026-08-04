@@ -30,6 +30,22 @@ endif
 KIND_CLUSTER_NAME ?= nok-demo
 KIND_CONFIG_REAL_LOC ?= build/kind-cluster.yaml
 KIND_LAUNCH_CONFIG ?= /tmp/kind-config-$(KIND_CLUSTER_NAME).yaml
+# KinD Docker network prefix (e.g. 172.18.0). LB IPs are written into nok-kpt
+# apply-setters.yaml before package install (CSPDevLabs/kpt#27).
+KIND_LB_DEFAULT_PREFIX ?= 172.18.0
+KIND_NET_PREFIX = $(shell docker inspect \
+	-f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' \
+	$(KIND_CLUSTER_NAME)-control-plane 2>/dev/null | \
+	awk -F. '{print $$1 "." $$2 "." $$3}')
+
+# Host octets for LoadBalancer services on the KinD Docker /24 (kpt#27 setters).
+KIND_LB_INGRESS_HOST ?= 100
+KIND_LB_BNG_SYSLOG_HOST ?= 101
+KIND_LB_GITEA_SSH_HOST ?= 102
+KIND_LB_DIA_SYSLOG_HOST ?= 103
+KIND_LB_BLACKBOX_HOST ?= 111
+KIND_LB_POOL_START ?= 100
+KIND_LB_POOL_END ?= 120
 
 # Optional: Set API server address if you need to access it from outside Docker
 # KIND_API_SERVER_ADDRESS ?= 127.0.0.1
@@ -92,6 +108,7 @@ SRSIM_LICENSE_FILE ?= $(NOK_CLABS_DIR)/nok-bng/srsim-lic-25.txt
 
 NOK_KPT_DIR ?= $(BASE)/nok-kpt
 KPT_REPO_URL ?= https://github.com/CSPDevLabs/kpt
+KPT_REPO_BRANCH ?= feat/ip-setters
 
 NOK_CLABS_DIR ?= $(BASE)/nok-clabs
 CLABS_REPO_URL ?= https://github.com/CSPDevLabs/nok-clabs
@@ -144,9 +161,10 @@ DOWNLOAD_TOOLS_LIST := $(KIND) $(KUBECTL) $(HELM) $(KPT) $(K9S) $(YQ) $(GH) $(CL
 
 # --- Flux & Gitea GitOps Configuration ---
 GITOPS_NAMESPACE ?= nok-git
-GITEA_HOST ?= gitea.nok.local
-GITEA_IP ?= 172.18.0.100
-GITEA_SSH_HOST ?= 172.18.0.102
+GITEA_HOST ?= bng.nok.local
+GITEA_HTTP_PATH ?= /gitea
+GITEA_IP = $(KIND_NET_PREFIX).$(KIND_LB_INGRESS_HOST)
+GITEA_SSH_HOST = $(KIND_NET_PREFIX).$(KIND_LB_GITEA_SSH_HOST)
 GITEA_ADMIN_USER ?= nok
 GITEA_ADMIN_PASS ?= N0kP4ssw0rd
 GITEA_ADMIN_EMAIL ?= nok@example.com
@@ -160,15 +178,15 @@ FLUX_SSH_KEY ?= $(HOME)/.ssh/flux_ed25519
 FLUX_BNG_REPO ?= nok-bng-resources
 FLUX_BNG_SECRET ?= nok-bng-auth
 BNG_MANIFESTS_DIR := ./nok-clabs/nok-bng/nok-manifests
-BNG_REPO_URL := ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_BNG_REPO).git
+BNG_REPO_URL = ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_BNG_REPO).git
 
 FLUX_DIA_REPO ?= nok-dia-resources
 FLUX_DIA_GRAFANA_REPO ?= grafana-dashboards
 FLUX_DIA_SECRET ?= nok-dia-auth
 DIA_MANIFESTS_DIR := ./nok-clabs/nok-dia/nok-manifests
 DIA_GRAFANA_DIR := ./nok-clabs/nok-dia/grafana-dashboards
-DIA_REPO_URL := ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_DIA_REPO).git
-DIA_GRAFANA_REPO_URL := ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_DIA_GRAFANA_REPO).git
+DIA_REPO_URL = ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_DIA_REPO).git
+DIA_GRAFANA_REPO_URL = ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_DIA_GRAFANA_REPO).git
 
 define GET_GITEA_POD
 $(shell $(KUBECTL) get pods -n $(GITOPS_NAMESPACE) \
@@ -204,7 +222,8 @@ define INSTALL_KPT_PACKAGE
 	}
 endef
 
-# The same as INSTALL_KPT_PACKAGE, but also runs kpt fn render to apply setters.
+# Runs kpt fn render (pipeline apply-setters.yaml) then kpt live apply.
+# LB IPs must be written first via update-kpt-lb-setters.
 define INSTALL_KPT_PACKAGE_WITH_SETTERS
 	{	\
 		echo -e "--> INSTALL: [\033[1;34m$2\033[0m] - Applying kpt package"									;\
@@ -241,7 +260,7 @@ proxy-env: ## Verify proxy environment variables are set
 	@echo "}"
 
 .PHONY: try-nok
-try-nok: check-tools cluster-up git-clone-kpt git-clone-clab install-base-pkg install-lb-pkg install-prom-oper install-gnmic-oper start-ingress-port-forward install-bbm-pkg ## Deploy Base Apps, clone kpt and clab repos, install base packages / load balancer / prometheus and gnmic operators, port forward
+try-nok: check-tools git-clone-kpt apply-kpt-overlays git-clone-clab cluster-up install-base-pkg install-lb-pkg install-prom-oper install-gnmic-oper start-ingress-port-forward install-bbm-pkg ## Deploy Base Apps, clone kpt and clab repos, install base packages / load balancer / prometheus and gnmic operators, port forward
 
 .PHONY: try-nok-bng
 try-nok-bng: try-nok install-bng-pkg install-git-pkg configure-auth gitops-init gitops-bng-kustomization ## Deploy BNG and GitOps
@@ -260,6 +279,28 @@ gitops-bng-kustomization: gitea-create-bng-repo flux-create-bng-secret flux-crea
 .PHONY: gitops-dia-kustomization
 gitops-dia-kustomization: gitea-create-dia-repo gitea-create-dia-grafana-repo flux-create-dia-secret flux-create-dia-source push-dia-manifests push-dia-manifests push-dia-grafana create-dia-kustomizations
 	@echo "--> GITOPS: DIA repo in sync by Flux"
+
+.PHONY: apply-kpt-overlays
+apply-kpt-overlays: ## Apply NetOpsKube overlays on top of cloned nok-kpt packages
+	@if [ ! -d "$(BASE)/overlays" ]; then \
+		echo "--> OVERLAY: No overlays directory, skipping" ;\
+	elif [ ! -d "$(NOK_KPT_DIR)" ]; then \
+		echo "Error: $(NOK_KPT_DIR) not found — run 'make git-clone-kpt' first" ;\
+		exit 1 ;\
+	else \
+		echo "--> OVERLAY: Applying NetOpsKube overlays to $(NOK_KPT_DIR)" ;\
+		cp -r $(BASE)/overlays/. $(NOK_KPT_DIR)/ ;\
+		rm -f $(NOK_KPT_DIR)/nok-git/gitea/ingress.yaml ;\
+		sed -i \
+			-e 's|DOMAIN=git.example.com|DOMAIN=bng.nok.local|' \
+			-e 's|ROOT_URL=http://git.example.com|ROOT_URL=http://bng.nok.local:8080/gitea/|' \
+			-e 's|SSH_DOMAIN=git.example.com|SSH_DOMAIN=bng.nok.local|' \
+			$(NOK_KPT_DIR)/nok-git/gitea/gitea-manifest-standalone.yaml ;\
+		if ! grep -q 'SERVE_FROM_SUB_PATH=true' $(NOK_KPT_DIR)/nok-git/gitea/gitea-manifest-standalone.yaml; then \
+			sed -i '/ROOT_URL=http:\/\/bng.nok.local:8080\/gitea\//a\    SERVE_FROM_SUB_PATH=true' \
+				$(NOK_KPT_DIR)/nok-git/gitea/gitea-manifest-standalone.yaml ;\
+		fi ;\
+	fi
 
 .PHONY: cluster-up
 cluster-up: $(KIND_CONFIG_REAL_LOC) ## Bring up the KinD cluster
@@ -290,6 +331,48 @@ cluster-up: $(KIND_CONFIG_REAL_LOC) ## Bring up the KinD cluster
 			echo "--> KIND: Cluster named $(KIND_CLUSTER_NAME) already exists" ;\
 		fi ;\
 	}
+	@$(MAKE) update-kpt-lb-setters
+
+.PHONY: update-kpt-lb-setters
+update-kpt-lb-setters: $(YQ) ## Write KinD LB IPs into nok-kpt apply-setters.yaml (kpt#27)
+	@IP_PREFIX="$(KIND_NET_PREFIX)" ;\
+	if [ -z "$$IP_PREFIX" ]; then \
+		echo "Error: KinD cluster '$(KIND_CLUSTER_NAME)' not found — cannot detect network prefix" ;\
+		exit 1 ;\
+	fi ;\
+	if [ ! -d "$(NOK_KPT_DIR)" ]; then \
+		echo "Error: $(NOK_KPT_DIR) not found — run 'make git-clone-kpt' first" ;\
+		exit 1 ;\
+	fi ;\
+	echo "--> KPT: KinD LB prefix $$IP_PREFIX → apply-setters.yaml (template: $(KIND_LB_DEFAULT_PREFIX))" ;\
+	$(YQ) eval '.data."metallb-pool-range" = "'$$IP_PREFIX'.$(KIND_LB_POOL_START)-'$$IP_PREFIX'.$(KIND_LB_POOL_END)"' \
+		-i $(NOK_KPT_DIR)/nok-lb/apply-setters.yaml ;\
+	$(YQ) eval '.data."ingress-lb-ip" = "'$$IP_PREFIX'.$(KIND_LB_INGRESS_HOST)"' \
+		-i $(NOK_KPT_DIR)/nok-base/apply-setters.yaml ;\
+	$(YQ) eval '.data."syslog-lb-ip" = "'$$IP_PREFIX'.$(KIND_LB_BNG_SYSLOG_HOST)"' \
+		-i $(NOK_KPT_DIR)/nok-bng/apply-setters.yaml ;\
+	$(YQ) eval '.data."syslog-lb-ip" = "'$$IP_PREFIX'.$(KIND_LB_DIA_SYSLOG_HOST)"' \
+		-i $(NOK_KPT_DIR)/nok-dia/apply-setters.yaml ;\
+	$(YQ) eval '.data."gitea-ssh-lb-ip" = "'$$IP_PREFIX'.$(KIND_LB_GITEA_SSH_HOST)"' \
+		-i $(NOK_KPT_DIR)/nok-git/apply-setters.yaml ;\
+	$(YQ) eval '.data."blackbox-lb-ip" = "'$$IP_PREFIX'.$(KIND_LB_BLACKBOX_HOST)"' \
+		-i $(NOK_KPT_DIR)/nok-bbm/apply-setters.yaml
+
+.PHONY: show-kind-lb-setters
+show-kind-lb-setters: ## Show KinD LB prefix and apply-setters.yaml values (kpt#27)
+	@IP_PREFIX="$(KIND_NET_PREFIX)" ;\
+	if [ -z "$$IP_PREFIX" ]; then \
+		echo "Error: KinD cluster '$(KIND_CLUSTER_NAME)' not found" ; exit 1 ;\
+	fi ;\
+	echo "--> KIND: KinD LB network prefix is $$IP_PREFIX (template: $(KIND_LB_DEFAULT_PREFIX))" ;\
+	echo "--> KPT: apply-setters.yaml values (run 'make update-kpt-lb-setters' to refresh):" ;\
+	for pkg in nok-lb nok-base nok-bng nok-dia nok-git nok-bbm; do \
+		f="$(NOK_KPT_DIR)/$$pkg/apply-setters.yaml" ;\
+		if [ -f "$$f" ]; then \
+			echo "    $$pkg:" ;\
+			$(YQ) eval '.data | to_entries | .[] | "      " + .key + ": " + .value' "$$f" ;\
+		fi ;\
+	done
 
 .PHONY: cluster-wait-for-node-ready
 cluster-wait-for-node-ready: ## Wait for the Kubernetes control plane node to be ready
@@ -328,7 +411,7 @@ create-tool-aliases: $(TOOLS) ## Create aliases for versioned binaries in the to
 
 .PHONY: help
 help: ## Display this help message
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-25s\033[0m %s\n", $$1, $$2}'
+	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-25s\033[0m %s\n", $$1, $$2}'
 
 # --- Tool Download Rules ---
 $(KIND): | $(BASE) $(TOOLS) ; $(info --> TOOLS: Ensuring kind is present in $(KIND))
@@ -373,12 +456,13 @@ $(FLUX): | $(BASE) $(TOOLS) ; $(info --> TOOLS: Ensuring flux is present in $(FL
 
 # --- Git Clone Targets ---
 .PHONY: git-clone-kpt
-git-clone-kpt: ## Clones the CSPDevLabs/kpt repository into ./nok-kpt
-	@echo "--> GIT: Cloning $(KPT_REPO_URL) into $(NOK_KPT_DIR)"
+git-clone-kpt: ## Clones the CSPDevLabs/kpt repository into ./nok-kpt (branch: feat/ip-setters)
+	@echo "--> GIT: Cloning $(KPT_REPO_URL) ($(KPT_REPO_BRANCH)) into $(NOK_KPT_DIR)"
 	@if [ ! -d "$(NOK_KPT_DIR)" ]; then \
-		git clone $(KPT_REPO_URL) $(NOK_KPT_DIR) ;\
+		git clone -b $(KPT_REPO_BRANCH) $(KPT_REPO_URL) $(NOK_KPT_DIR) ;\
 	else \
 		echo "--> GIT: $(NOK_KPT_DIR) already exists. Skipping clone." ;\
+		echo "--> GIT: Ensure branch $(KPT_REPO_BRANCH) is checked out (override with NOK_KPT_DIR for a local kpt checkout)." ;\
 	fi
 
 .PHONY: git-clone-clab
@@ -513,8 +597,8 @@ start-ingress-port-forward: ## Starts background port-forward for ingress-nginx-
 	@echo "    To stop it, find the process using 'ps aux | grep \"kubectl port-forward\"' and 'kill <PID>'."
 
 .PHONY: install-base-pkg
-install-base-pkg: ## Installs the base kpt package from ./nok-kpt/nok-base
-	@$(call INSTALL_KPT_PACKAGE,$(NOK_KPT_DIR)/nok-base,nok-base,"--reconcile-timeout=5m", "--inventory-policy=adopt")	
+install-base-pkg: update-kpt-lb-setters ## Installs the base kpt package from ./nok-kpt/nok-base
+	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-base,nok-base,"--reconcile-timeout=5m", "--inventory-policy=adopt")	
 
 .PHONY: install-bbm-pkg
 install-bbm-pkg: ## Installs the BBM (self-monitotoring and observability) kpt package from ./nok-kpt/nok-bbm
@@ -532,19 +616,19 @@ wait-for-metallb-ready: ## Wait for the Kubernetes Metallb node to be ready
 
 .PHONY: install-lb-pkg
 install-lb-pkg: check-tools git-clone-kpt install-base-pkg wait-for-metallb-ready ## Installs the base kpt package from ./nok-kpt/nok-lb
-	@$(call INSTALL_KPT_PACKAGE,$(NOK_KPT_DIR)/nok-lb,nok-lb,"--reconcile-timeout=5m", "")		
+	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-lb,nok-lb,"--reconcile-timeout=5m", "")		
 
 .PHONY: install-bng-pkg
 install-bng-pkg: check-tools git-clone-kpt install-base-pkg install-lb-pkg ## Installs the base kpt package from ./nok-kpt/nok-bng
-	@$(call INSTALL_KPT_PACKAGE,$(NOK_KPT_DIR)/nok-bng,nok-bng,"--reconcile-timeout=5m", "--inventory-policy=adopt")		
+	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-bng,nok-bng,"--reconcile-timeout=5m", "--inventory-policy=adopt")		
 
 .PHONY: install-dia-pkg
 install-dia-pkg: check-tools git-clone-kpt install-base-pkg install-lb-pkg ## Installs the base kpt package from ./nok-kpt/nok-dia
-	@$(call INSTALL_KPT_PACKAGE,$(NOK_KPT_DIR)/nok-dia,nok-dia,"--reconcile-timeout=5m", "--inventory-policy=adopt")
+	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-dia,nok-dia,"--reconcile-timeout=5m", "--inventory-policy=adopt")
 
 .PHONY: install-git-pkg
 install-git-pkg: check-tools git-clone-kpt install-base-pkg install-lb-pkg ## Installs the base kpt package from ./nok-kpt/nok-git
-	@$(call INSTALL_KPT_PACKAGE,$(NOK_KPT_DIR)/nok-git,nok-git,"--reconcile-timeout=5m", "--inventory-policy=adopt")	
+	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-git,nok-git,"--reconcile-timeout=5m", "--inventory-policy=adopt")	
 
 
 .PHONY: install-prom-oper
@@ -606,7 +690,7 @@ gitea-create-flux-repo:
 		if $(CURL) --silent --fail \
 			--resolve $(GITEA_HOST):80:$(GITEA_IP) \
 			-u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
-			http://$(GITEA_HOST)/api/v1/user/repos \
+			http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/user/repos \
 			>/dev/null; then \
 			echo "--> GITEA: API is available"; \
 			break; \
@@ -623,7 +707,7 @@ gitea-create-flux-repo:
 	@$(CURL) --silent --fail \
 	  --resolve $(GITEA_HOST):80:$(GITEA_IP) \
 	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
-	  http://$(GITEA_HOST)/api/v1/repos/$(GITEA_ADMIN_USER)/$(FLUX_GIT_REPO) \
+	  http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/repos/$(GITEA_ADMIN_USER)/$(FLUX_GIT_REPO) \
 	  >/dev/null || \
 	$(CURL) --silent --fail \
 	  --resolve $(GITEA_HOST):80:$(GITEA_IP) \
@@ -631,7 +715,7 @@ gitea-create-flux-repo:
 	  -H "Content-Type: application/json" \
 	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
 	  -d '{"name":"$(FLUX_GIT_REPO)","private":false,"auto_init":true}' \
-	  http://$(GITEA_HOST)/api/v1/user/repos
+	  http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/user/repos
 
 
 .PHONY: gitea-add-ssh-key
@@ -655,18 +739,18 @@ gitea-add-ssh-key:
 	\
 	SSH_KEY="$$(cat $(FLUX_SSH_KEY).pub)"; \
 	echo "--> SSH: Using Public Key: $$SSH_KEY"; \
-	if $(CURL) --resolve $(GITEA_HOST):80:172.18.0.100 \
+	if $(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) \
 	     -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
-	     http://$(GITEA_HOST)/api/v1/user/keys | \
+	     http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/user/keys | \
 	     jq -r '.[].key' | grep -Fxq "$$SSH_KEY"; then \
 		echo "--> GITEA: SSH key already registered, skipping"; \
 	else \
 		echo "--> GITEA: Registering SSH key"; \
-		$(CURL) --resolve $(GITEA_HOST):80:172.18.0.100 -X POST \
+		$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) -X POST \
 		  -H "Content-Type: application/json" \
 		  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
 		  -d "{\"title\":\"flux ssh key\",\"key\":\"$$SSH_KEY\"}" \
-		  http://$(GITEA_HOST)/api/v1/user/keys; \
+		  http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/user/keys; \
 	fi; \
 	\
 	echo "--> GITEA: Ensuring $(GITEA_SSH_HOST) is in ~/.ssh/known_hosts"; \
@@ -681,7 +765,7 @@ gitea-add-ssh-key:
 flux-bootstrap: check-tools gitea-create-admin gitea-create-flux-repo gitea-add-ssh-key
 	@echo "--> GITEA: Ensuring repository $(FLUX_GIT_REPO) exists"
 	@$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
-	  http://$(GITEA_HOST)/api/v1/repos/$(GITEA_ADMIN_USER)/$(FLUX_GIT_REPO) \
+	  http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/repos/$(GITEA_ADMIN_USER)/$(FLUX_GIT_REPO) \
 	  >/dev/null || \
 	@echo "--> FLUX: Bootstrapping cluster"
 
@@ -705,28 +789,28 @@ gitea-create-bng-repo:
 	@echo "--> GITEA: Ensuring repo $(FLUX_BNG_REPO) exists"
 	@$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) \
 	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
-	  http://$(GITEA_HOST)/api/v1/repos/$(GITEA_ADMIN_USER)/$(FLUX_BNG_REPO) \
+	  http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/repos/$(GITEA_ADMIN_USER)/$(FLUX_BNG_REPO) \
 	  >/dev/null || \
 	$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) \
 	  -X POST \
 	  -H "Content-Type: application/json" \
 	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
 	  -d '{"name":"$(FLUX_BNG_REPO)", "description": "BNG resources for Network Observability and Conf Management","private":false,"auto_init":true}' \
-	  http://$(GITEA_HOST)/api/v1/user/repos
+	  http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/user/repos
 
 .PHONY: gitea-create-dia-repo
 gitea-create-dia-repo:
 	@echo "--> GITEA: Ensuring repo $(FLUX_DIA_REPO) exists"
 	@$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) \
 	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
-	  http://$(GITEA_HOST)/api/v1/repos/$(GITEA_ADMIN_USER)/$(FLUX_DIA_REPO) \
+	  http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/repos/$(GITEA_ADMIN_USER)/$(FLUX_DIA_REPO) \
 	  >/dev/null || \
 	$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) \
 	  -X POST \
 	  -H "Content-Type: application/json" \
 	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
 	  -d '{"name":"$(FLUX_DIA_REPO)", "description": "DIA resources for Network Observability and Conf Management","private":false,"auto_init":true}' \
-	  http://$(GITEA_HOST)/api/v1/user/repos
+	  http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/user/repos
 
 
 .PHONY: gitea-create-dia-grafana-repo
@@ -734,14 +818,14 @@ gitea-create-dia-grafana-repo:
 	@echo "--> GITEA: Ensuring repo $(FLUX_DIA_GRAFANA_REPO) exists"
 	@$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) \
 	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
-	  http://$(GITEA_HOST)/api/v1/repos/$(GITEA_ADMIN_USER)/$(FLUX_DIA_GRAFANA_REPO) \
+	  http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/repos/$(GITEA_ADMIN_USER)/$(FLUX_DIA_GRAFANA_REPO) \
 	  >/dev/null || \
 	$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) \
 	  -X POST \
 	  -H "Content-Type: application/json" \
 	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
 	  -d '{"name":"$(FLUX_DIA_GRAFANA_REPO)", "description": "NetOpsKube DIA Grafana Dashboards","private":false,"auto_init":true}' \
-	  http://$(GITEA_HOST)/api/v1/user/repos
+	  http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/user/repos
 
 
 .PHONY: flux-create-bng-secret

@@ -138,9 +138,18 @@ Ensure proxy settings are properly configured in the respective package manager 
    - A valid Nokia SROS license file must be present at the path specified by SRSIM_LICENSE_FILE. Default path is $(NOK_CLABS_DIR)/nok-bng/srsim-lic-25.txt
 
 ### IP Address Segments
-This deployment uses the following network ranges:
-   - 172.18.0.0/24 → KinD cluster and services
-   - 172.21.20.0/24 → Containerlab topology
+| Network | Range | Notes |
+|---------|-------|-------|
+| KinD Docker (MetalLB/LB) | auto-detected `/24` | `make update-kpt-lb-setters` writes LB IPs into `nok-kpt/*/apply-setters.yaml` at `cluster-up`; `kpt fn render` applies them ([kpt#27](https://github.com/CSPDevLabs/kpt/pull/27)) |
+| KinD pods | `10.244.0.0/16` | Fixed in `build/kind-cluster.yaml` |
+| KinD services | `10.96.0.0/12` | Fixed in `build/kind-cluster.yaml` |
+| Containerlab (BNG) | `172.21.20.0/24` | Separate Docker network |
+
+After `make cluster-up`, check the detected LB prefix:
+```bash
+make update-kpt-lb-setters   # writes detected prefix into apply-setters.yaml
+make show-kind-lb-setters  # shows current apply-setters.yaml values
+```
 
 
 ### Makefile Updates
@@ -167,18 +176,24 @@ HTTPS_PROXY ?= http://<proxy-ip>:<port>
 NO_PROXY    ?= 127.0.0.1,localhost,::1,.svc,.cluster.local,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,10.96.0.0/12,10.244.0.0/16,.nok.local,gitea.nok.local
 ```
 
-### Update Gitea IP on /etc/hosts. 
+### Update /etc/hosts for browser access
 
-Note: BNG cluster details will be automatically updated.
+Use port-forward (`:8080`) on the deploy host. A single hostname is enough for portal and Gitea:
 
 ```bash
-172.18.0.100    gitea.nok.local
+127.0.0.1 bng.nok.local
+```
+
+For direct MetalLB ingress access (without port-forward), use the detected KinD prefix (e.g. `172.19.0.100`):
+
+```bash
+<kinD-prefix>.100 bng.nok.local
 ```
 Example:
 ```bash
 ubuntu@nokia:~/kube_project/NetOpsKube$ cat /etc/hosts
 127.0.0.1 localhost
-172.18.0.100    gitea.nok.local
+127.0.0.1 bng.nok.local
 ..........
 
 ubuntu@nokia:~/kube_project/NetOpsKube$
@@ -358,7 +373,11 @@ sudo docker exec -it clab-sros-bngt-bngblaster bash -c 'bngblaster -C pppoe.json
  ```
 
 ## Open portal
-Add entries for "bng.nok.local" and "gitea.nok.local" in the /etc/hosts file of your local machine (e.g., your Windows laptop), mapping them to the IP address of the Ubuntu host. This allows your browser to resolve the URLs correctly.
+Add `bng.nok.local` to the `/etc/hosts` file of your local machine (e.g., your Windows laptop), mapping it to the IP address of the Ubuntu host. This allows your browser to resolve the URLs correctly.
+
+```bash
+127.0.0.1 bng.nok.local
+```
 
 ### NOK Portal
 http://bng.nok.local:8080/login
@@ -370,11 +389,16 @@ Username: admin
 Password: admin123
 ```
 
-### Gitea Portal
-http://gitea.nok.local:8080
+### Gitea (GitOps)
 
-Login Credentials:
+Gitea is served under the same portal host.
+
+- Direct URL: http://bng.nok.local:8080/gitea/
+- Or from the portal menu: **Gitea** → `/gitea/nok/nok-bng-resources`
+
+Login credentials:
+
 ```bash
-email: nok@example.com
-password "N0kP4ssw0rd"
+Username: nok
+Password: N0kP4ssw0rd
 ```

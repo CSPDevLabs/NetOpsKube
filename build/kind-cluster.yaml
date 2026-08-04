@@ -3,6 +3,8 @@ kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 networking:
   ipFamily: dual
+  podSubnet: "10.244.0.0/16"
+  serviceSubnet: "10.96.0.0/12"
   # if you want to expose the kind cluster externally
   # change the API server address from loopback to the desired IP
   # via KIND_API_SERVER_ADDRESS make variable
