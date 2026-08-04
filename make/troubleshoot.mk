@@ -73,8 +73,8 @@ restart-gnmic-collector: $(KUBECTL) ## Restart gNMIc collector pods in BNG_NAMES
 .PHONY: verify-lb-ips
 verify-lb-ips: $(KUBECTL) ## Verify KinD LB prefix, cluster LoadBalancer IPs, and Gitea API reachability
 	@IP_PREFIX="$(KIND_NET_PREFIX)" ;\
-	EXPECTED_INGRESS="$(KIND_NET_PREFIX).100" ;\
-	EXPECTED_GITEA_SSH="$(KIND_NET_PREFIX).102" ;\
+	EXPECTED_INGRESS="$(KIND_NET_PREFIX).$(KIND_LB_INGRESS_HOST)" ;\
+	EXPECTED_GITEA_SSH="$(KIND_NET_PREFIX).$(KIND_LB_GITEA_SSH_HOST)" ;\
 	FAIL=0 ;\
 	echo "--> VERIFY: KinD LB network prefix is $$IP_PREFIX" ;\
 	if [ -z "$$IP_PREFIX" ]; then \

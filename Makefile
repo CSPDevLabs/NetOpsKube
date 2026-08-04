@@ -30,13 +30,22 @@ endif
 KIND_CLUSTER_NAME ?= nok-demo
 KIND_CONFIG_REAL_LOC ?= build/kind-cluster.yaml
 KIND_LAUNCH_CONFIG ?= /tmp/kind-config-$(KIND_CLUSTER_NAME).yaml
-# KinD Docker network prefix (e.g. 172.18.0). Non-default LB IPs are applied at
-# package install via kpt fn eval + apply-setters (CSPDevLabs/kpt#27).
+# KinD Docker network prefix (e.g. 172.18.0). LB IPs are written into nok-kpt
+# apply-setters.yaml before package install (CSPDevLabs/kpt#27).
 KIND_LB_DEFAULT_PREFIX ?= 172.18.0
 KIND_NET_PREFIX = $(shell docker inspect \
 	-f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' \
 	$(KIND_CLUSTER_NAME)-control-plane 2>/dev/null | \
 	awk -F. '{print $$1 "." $$2 "." $$3}')
+
+# Host octets for LoadBalancer services on the KinD Docker /24 (kpt#27 setters).
+KIND_LB_INGRESS_HOST ?= 100
+KIND_LB_BNG_SYSLOG_HOST ?= 101
+KIND_LB_GITEA_SSH_HOST ?= 102
+KIND_LB_DIA_SYSLOG_HOST ?= 103
+KIND_LB_BLACKBOX_HOST ?= 111
+KIND_LB_POOL_START ?= 100
+KIND_LB_POOL_END ?= 120
 
 # Optional: Set API server address if you need to access it from outside Docker
 # KIND_API_SERVER_ADDRESS ?= 127.0.0.1
@@ -154,8 +163,8 @@ DOWNLOAD_TOOLS_LIST := $(KIND) $(KUBECTL) $(HELM) $(KPT) $(K9S) $(YQ) $(GH) $(CL
 GITOPS_NAMESPACE ?= nok-git
 GITEA_HOST ?= bng.nok.local
 GITEA_HTTP_PATH ?= /gitea
-GITEA_IP = $(KIND_NET_PREFIX).100
-GITEA_SSH_HOST = $(KIND_NET_PREFIX).102
+GITEA_IP = $(KIND_NET_PREFIX).$(KIND_LB_INGRESS_HOST)
+GITEA_SSH_HOST = $(KIND_NET_PREFIX).$(KIND_LB_GITEA_SSH_HOST)
 GITEA_ADMIN_USER ?= nok
 GITEA_ADMIN_PASS ?= N0kP4ssw0rd
 GITEA_ADMIN_EMAIL ?= nok@example.com
@@ -213,12 +222,8 @@ define INSTALL_KPT_PACKAGE
 	}
 endef
 
-KPT_APPLY_SETTERS_IMAGE ?= gcr.io/kpt-fn/apply-setters:v0.2.0
-
-# The same as INSTALL_KPT_PACKAGE, but also runs kpt fn render to apply setters.
-# When KinD uses a non-default Docker prefix, LB setter values are overridden
-# imperatively via kpt fn eval (kpt#27) after render — apply-setters.yaml keeps
-# the 172.18.0.x template defaults and is not modified on disk.
+# Runs kpt fn render (pipeline apply-setters.yaml) then kpt live apply.
+# LB IPs must be written first via update-kpt-lb-setters.
 define INSTALL_KPT_PACKAGE_WITH_SETTERS
 	{	\
 		echo -e "--> INSTALL: [\033[1;34m$2\033[0m] - Applying kpt package"									;\
@@ -229,41 +234,6 @@ define INSTALL_KPT_PACKAGE_WITH_SETTERS
 			echo -e "--> INSTALL: [\033[1;34m$2\033[0m] - Resource group found, don't re-init this package"	;\
 		fi																									;\
 		$(KPT) fn render 2>&1 | $(INDENT_OUT)																;\
-		IP_PREFIX="$(KIND_NET_PREFIX)" ;\
-		if [[ -n "$$IP_PREFIX" && "$$IP_PREFIX" != "$(KIND_LB_DEFAULT_PREFIX)" ]]; then						;\
-			case "$2" in																						 \
-				nok-lb)																								 \
-					echo -e "--> INSTALL: [\033[1;34m$2\033[0m] - KinD LB setters (prefix $$IP_PREFIX)" ;		 \
-					$(KPT) fn eval . --image $(KPT_APPLY_SETTERS_IMAGE) -- \
-						metallb-pool-range="$$IP_PREFIX.100-$$IP_PREFIX.120" 2>&1 | $(INDENT_OUT) ;			 \
-					;;																								 \
-				nok-base)																						 \
-					echo -e "--> INSTALL: [\033[1;34m$2\033[0m] - KinD LB setters (prefix $$IP_PREFIX)" ;		 \
-					$(KPT) fn eval . --image $(KPT_APPLY_SETTERS_IMAGE) -- \
-						ingress-lb-ip="$$IP_PREFIX.100" 2>&1 | $(INDENT_OUT) ;									 \
-					;;																								 \
-				nok-bng)																						 \
-					echo -e "--> INSTALL: [\033[1;34m$2\033[0m] - KinD LB setters (prefix $$IP_PREFIX)" ;		 \
-					$(KPT) fn eval . --image $(KPT_APPLY_SETTERS_IMAGE) -- \
-						syslog-lb-ip="$$IP_PREFIX.101" 2>&1 | $(INDENT_OUT) ;									 \
-					;;																								 \
-				nok-dia)																						 \
-					echo -e "--> INSTALL: [\033[1;34m$2\033[0m] - KinD LB setters (prefix $$IP_PREFIX)" ;		 \
-					$(KPT) fn eval . --image $(KPT_APPLY_SETTERS_IMAGE) -- \
-						syslog-lb-ip="$$IP_PREFIX.103" 2>&1 | $(INDENT_OUT) ;									 \
-					;;																								 \
-				nok-git)																						 \
-					echo -e "--> INSTALL: [\033[1;34m$2\033[0m] - KinD LB setters (prefix $$IP_PREFIX)" ;		 \
-					$(KPT) fn eval . --image $(KPT_APPLY_SETTERS_IMAGE) -- \
-						gitea-ssh-lb-ip="$$IP_PREFIX.102" 2>&1 | $(INDENT_OUT) ;								 \
-					;;																								 \
-				nok-bbm)																						 \
-					echo -e "--> INSTALL: [\033[1;34m$2\033[0m] - KinD LB setters (prefix $$IP_PREFIX)" ;		 \
-					$(KPT) fn eval . --image $(KPT_APPLY_SETTERS_IMAGE) -- \
-						blackbox-lb-ip="$$IP_PREFIX.111" 2>&1 | $(INDENT_OUT) ;									 \
-					;;																								 \
-			esac ;\
-		fi ;\
 		$(KPT) live apply $3 $4 2>&1 | $(INDENT_OUT)                                                   		;\
 		popd &>/dev/null || (echo "[ERROR]: Failed to switch back from $2" && exit 1)						;\
 		echo -e "--> INSTALL: [\033[0;32m$2\033[0m] - Applied and reconciled package"						;\
@@ -361,25 +331,48 @@ cluster-up: $(KIND_CONFIG_REAL_LOC) ## Bring up the KinD cluster
 			echo "--> KIND: Cluster named $(KIND_CLUSTER_NAME) already exists" ;\
 		fi ;\
 	}
+	@$(MAKE) update-kpt-lb-setters
+
+.PHONY: update-kpt-lb-setters
+update-kpt-lb-setters: $(YQ) ## Write KinD LB IPs into nok-kpt apply-setters.yaml (kpt#27)
+	@IP_PREFIX="$(KIND_NET_PREFIX)" ;\
+	if [ -z "$$IP_PREFIX" ]; then \
+		echo "Error: KinD cluster '$(KIND_CLUSTER_NAME)' not found — cannot detect network prefix" ;\
+		exit 1 ;\
+	fi ;\
+	if [ ! -d "$(NOK_KPT_DIR)" ]; then \
+		echo "Error: $(NOK_KPT_DIR) not found — run 'make git-clone-kpt' first" ;\
+		exit 1 ;\
+	fi ;\
+	echo "--> KPT: KinD LB prefix $$IP_PREFIX → apply-setters.yaml (template: $(KIND_LB_DEFAULT_PREFIX))" ;\
+	$(YQ) eval '.data."metallb-pool-range" = "'$$IP_PREFIX'.$(KIND_LB_POOL_START)-'$$IP_PREFIX'.$(KIND_LB_POOL_END)"' \
+		-i $(NOK_KPT_DIR)/nok-lb/apply-setters.yaml ;\
+	$(YQ) eval '.data."ingress-lb-ip" = "'$$IP_PREFIX'.$(KIND_LB_INGRESS_HOST)"' \
+		-i $(NOK_KPT_DIR)/nok-base/apply-setters.yaml ;\
+	$(YQ) eval '.data."syslog-lb-ip" = "'$$IP_PREFIX'.$(KIND_LB_BNG_SYSLOG_HOST)"' \
+		-i $(NOK_KPT_DIR)/nok-bng/apply-setters.yaml ;\
+	$(YQ) eval '.data."syslog-lb-ip" = "'$$IP_PREFIX'.$(KIND_LB_DIA_SYSLOG_HOST)"' \
+		-i $(NOK_KPT_DIR)/nok-dia/apply-setters.yaml ;\
+	$(YQ) eval '.data."gitea-ssh-lb-ip" = "'$$IP_PREFIX'.$(KIND_LB_GITEA_SSH_HOST)"' \
+		-i $(NOK_KPT_DIR)/nok-git/apply-setters.yaml ;\
+	$(YQ) eval '.data."blackbox-lb-ip" = "'$$IP_PREFIX'.$(KIND_LB_BLACKBOX_HOST)"' \
+		-i $(NOK_KPT_DIR)/nok-bbm/apply-setters.yaml
 
 .PHONY: show-kind-lb-setters
-show-kind-lb-setters: ## Show KinD LB setter values (kpt fn eval args per kpt#27)
+show-kind-lb-setters: ## Show KinD LB prefix and apply-setters.yaml values (kpt#27)
 	@IP_PREFIX="$(KIND_NET_PREFIX)" ;\
 	if [ -z "$$IP_PREFIX" ]; then \
 		echo "Error: KinD cluster '$(KIND_CLUSTER_NAME)' not found" ; exit 1 ;\
 	fi ;\
 	echo "--> KIND: KinD LB network prefix is $$IP_PREFIX (template: $(KIND_LB_DEFAULT_PREFIX))" ;\
-	if [ "$$IP_PREFIX" = "$(KIND_LB_DEFAULT_PREFIX)" ]; then \
-		echo "--> KIND: Prefix matches template; apply-setters.yaml defaults apply at kpt fn render" ;\
-	else \
-		echo "--> KIND: Non-default prefix; install targets run kpt fn eval with:" ;\
-		echo "    nok-lb:     metallb-pool-range=$$IP_PREFIX.100-$$IP_PREFIX.120" ;\
-		echo "    nok-base:   ingress-lb-ip=$$IP_PREFIX.100" ;\
-		echo "    nok-bng:    syslog-lb-ip=$$IP_PREFIX.101" ;\
-		echo "    nok-dia:    syslog-lb-ip=$$IP_PREFIX.103" ;\
-		echo "    nok-git:    gitea-ssh-lb-ip=$$IP_PREFIX.102" ;\
-		echo "    nok-bbm:    blackbox-lb-ip=$$IP_PREFIX.111" ;\
-	fi
+	echo "--> KPT: apply-setters.yaml values (run 'make update-kpt-lb-setters' to refresh):" ;\
+	for pkg in nok-lb nok-base nok-bng nok-dia nok-git nok-bbm; do \
+		f="$(NOK_KPT_DIR)/$$pkg/apply-setters.yaml" ;\
+		if [ -f "$$f" ]; then \
+			echo "    $$pkg:" ;\
+			$(YQ) eval '.data | to_entries | .[] | "      " + .key + ": " + .value' "$$f" ;\
+		fi ;\
+	done
 
 .PHONY: cluster-wait-for-node-ready
 cluster-wait-for-node-ready: ## Wait for the Kubernetes control plane node to be ready
@@ -604,7 +597,7 @@ start-ingress-port-forward: ## Starts background port-forward for ingress-nginx-
 	@echo "    To stop it, find the process using 'ps aux | grep \"kubectl port-forward\"' and 'kill <PID>'."
 
 .PHONY: install-base-pkg
-install-base-pkg: ## Installs the base kpt package from ./nok-kpt/nok-base
+install-base-pkg: update-kpt-lb-setters ## Installs the base kpt package from ./nok-kpt/nok-base
 	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-base,nok-base,"--reconcile-timeout=5m", "--inventory-policy=adopt")	
 
 .PHONY: install-bbm-pkg
