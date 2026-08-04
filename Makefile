@@ -43,7 +43,6 @@ KIND_LB_INGRESS_HOST ?= 100
 KIND_LB_BNG_SYSLOG_HOST ?= 101
 KIND_LB_GITEA_SSH_HOST ?= 102
 KIND_LB_DIA_SYSLOG_HOST ?= 103
-KIND_LB_BLACKBOX_HOST ?= 111
 KIND_LB_POOL_START ?= 100
 KIND_LB_POOL_END ?= 120
 
@@ -354,9 +353,7 @@ update-kpt-lb-setters: $(YQ) ## Write KinD LB IPs into nok-kpt apply-setters.yam
 	$(YQ) eval '.data."syslog-lb-ip" = "'$$IP_PREFIX'.$(KIND_LB_DIA_SYSLOG_HOST)"' \
 		-i $(NOK_KPT_DIR)/nok-dia/apply-setters.yaml ;\
 	$(YQ) eval '.data."gitea-ssh-lb-ip" = "'$$IP_PREFIX'.$(KIND_LB_GITEA_SSH_HOST)"' \
-		-i $(NOK_KPT_DIR)/nok-git/apply-setters.yaml ;\
-	$(YQ) eval '.data."blackbox-lb-ip" = "'$$IP_PREFIX'.$(KIND_LB_BLACKBOX_HOST)"' \
-		-i $(NOK_KPT_DIR)/nok-bbm/apply-setters.yaml
+		-i $(NOK_KPT_DIR)/nok-git/apply-setters.yaml
 
 .PHONY: show-kind-lb-setters
 show-kind-lb-setters: ## Show KinD LB prefix and apply-setters.yaml values (kpt#27)
