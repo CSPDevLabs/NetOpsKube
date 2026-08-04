@@ -88,23 +88,8 @@ gitops-init: gitea-create-admin gitea-create-flux-repo gitea-add-ssh-key  flux-b
 .PHONY: generate-portal-pv
 generate-portal-pv:
 	@echo "--> PORTAL: Syncing portal files into Kind node"
-	@if [ "$(KEYCLOAK_ENABLED)" = "YES" ]; then \
-	    if [ ! -d "./nok-portal-auth" ]; then \
-			$(MAKE) clone-keycloak-repo; \
-		else \
-			echo "--> GIT: ./nok-portal-auth already exists. Skipping clone."; \
-		fi; \
-		echo "--> PORTAL: Using Keycloak portal"; \
-		docker exec $(KIND_CLUSTER_NAME)-control-plane rm -rf /portal; \
-		docker exec $(KIND_CLUSTER_NAME)-control-plane mkdir -p /portal; \
-		docker cp $(NOK_KEYCLOAK_DIR)/keycloak/index.html \
-			$(KIND_CLUSTER_NAME)-control-plane:/portal/index.html; \
-	else \
-		echo "--> PORTAL: Using default no-auth portal"; \
-		docker exec $(KIND_CLUSTER_NAME)-control-plane rm -rf /portal; \
-		docker cp $(NOK_KPT_DIR)/nok-base/portal \
-			$(KIND_CLUSTER_NAME)-control-plane:/portal; \
-	fi
+	@docker exec $(KIND_CLUSTER_NAME)-control-plane rm -rf /portal
+	@docker cp $(NOK_KPT_DIR)/nok-base/portal $(KIND_CLUSTER_NAME)-control-plane:/portal
 	@echo "--> PORTAL: Portal files synchronized"
 
 .PHONY: cluster-up
@@ -461,8 +446,13 @@ set-proxy-env:
 	@for item in $(PROXY_DEPLOYMENTS); do \
 		NS=$$(echo $$item | cut -d: -f1); \
 		DEP=$$(echo $$item | cut -d: -f2); \
-		echo "Updating $$DEP in namespace $$NS"; \
 		\
+		if ! $(KUBECTL) get deployment $$DEP -n $$NS >/dev/null 2>&1; then \
+			echo "--> Skipping $$DEP (not found in namespace $$NS)"; \
+			continue; \
+		fi; \
+		\
+		echo "Updating $$DEP in namespace $$NS"; \
 		$(KUBECTL) set env deployment $$DEP \
 			HTTP_PROXY="$(HTTP_PROXY)" \
 			HTTPS_PROXY="$(HTTPS_PROXY)" \

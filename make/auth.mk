@@ -59,7 +59,7 @@ deploy-auth:
 portal-enable-keycloak:
 	@echo "--> PORTAL: Enabling Keycloak menu"
 	@$(KUBECTL) get configmap nok-apps-menu-config -n nok-base -o json | \
-	jq '.data["menu-config.json"] |= (fromjson | if (.featured | any(.name == "Keycloak")) then . else .featured += [{"name":"Keycloak","icon":"keycloak","description":"Authentication and access management","path":"http://keycloak.nok.local:8080/admin/master/console","openInNewTab":true}] end | tojson)' | \
+	jq '.data["menu-config.json"] |= (fromjson | .featured |= map(if .name == "Keycloak" then . + {"deployed":"yes"} else . end) | tojson)' | \
 	$(KUBECTL) apply -f -
 	@$(KUBECTL) rollout restart deployment/nok-apps-portal-app -n nok-base
 
@@ -119,7 +119,7 @@ annotate-auth-ingress-dia:
 
 ifeq ($(KEYCLOAK_ENABLED),YES)
 
-configure-auth: deploy-auth portal-enable-keycloak annotate-auth-ingress-base
+configure-auth: clone-keycloak-repo deploy-auth portal-enable-keycloak annotate-auth-ingress-base
 
 else
 
