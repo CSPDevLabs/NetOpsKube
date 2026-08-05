@@ -33,7 +33,8 @@ KIND_LAUNCH_CONFIG ?= /tmp/kind-config-$(KIND_CLUSTER_NAME).yaml
 # KinD Docker network prefix (e.g. 172.18.0). LB IPs are written into nok-kpt
 # apply-setters.yaml before package install (CSPDevLabs/kpt#27).
 KIND_LB_DEFAULT_PREFIX ?= 172.18.0
-KIND_NET_PREFIX = $(shell docker inspect \
+# Override on the CLI for tests: make update-kpt-lb-setters KIND_NET_PREFIX=172.30.0
+KIND_NET_PREFIX ?= $(shell docker inspect \
 	-f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' \
 	$(KIND_CLUSTER_NAME)-control-plane 2>/dev/null | \
 	awk -F. '{print $$1 "." $$2 "." $$3}')
@@ -73,6 +74,7 @@ FLUX ?= $(TOOLS)/flux
 # Troubleshooting / day-2 ops targets live in their own file to keep this
 # Makefile focused on install + deploy. See docs/TROUBLESHOOTING.md.
 include make/troubleshoot.mk
+include make/test.mk
 
 
 # --- Proxy Settings ---
