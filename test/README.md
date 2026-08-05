@@ -52,10 +52,10 @@ NOK_RUN_INTEGRATION_TESTS=yes make test-integration
 ```text
 test/
   bats/
-    unit/           # KinD setter wiring, Makefile smoke
+    unit/           # overlays, Makefile vars, KinD config, setter wiring
     integration/    # verify-lb-ips against live cluster
   fixtures/
-    nok-kpt/        # minimal apply-setters.yaml trees for unit tests
+    nok-kpt/        # minimal apply-setters + Gitea manifests for unit tests
   helpers/
     common.bash
 ```

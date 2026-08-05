@@ -12,6 +12,13 @@ setup_nok_kpt_fixture() {
   export FIXTURE_NOK_KPT
 }
 
+# Return an expanded Makefile variable value with optional overrides.
+make_var() {
+  local var_name="$1"
+  shift
+  make -C "$NETOPSKUBE_ROOT" --eval "all:;@echo \$(${var_name})" "$@" -s
+}
+
 # Run a Makefile target against the fixture nok-kpt checkout.
 run_make() {
   # shellcheck disable=SC2068
