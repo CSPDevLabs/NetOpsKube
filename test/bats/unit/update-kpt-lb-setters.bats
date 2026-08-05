@@ -26,6 +26,13 @@ setup() {
   [ "$(yq_get "$FIXTURE_NOK_KPT/nok-base/apply-setters.yaml" ingress-lb-ip)" = "172.30.0.100" ]
 }
 
+@test "update-kpt-lb-setters writes default template prefix 172.18.0" {
+  run_make update-kpt-lb-setters KIND_NET_PREFIX=172.18.0
+  [ "$status" -eq 0 ]
+  [ "$(yq_get "$FIXTURE_NOK_KPT/nok-base/apply-setters.yaml" ingress-lb-ip)" = "172.18.0.100" ]
+  [ "$(yq_get "$FIXTURE_NOK_KPT/nok-lb/apply-setters.yaml" metallb-pool-range)" = "172.18.0.100-172.18.0.120" ]
+}
+
 @test "update-kpt-lb-setters fails when KinD prefix is empty" {
   run_make update-kpt-lb-setters KIND_NET_PREFIX=""
   [ "$status" -ne 0 ]

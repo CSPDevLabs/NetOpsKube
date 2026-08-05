@@ -44,6 +44,15 @@ setup() {
   [ "$count" -eq 1 ]
 }
 
+@test "apply-kpt-overlays skips when overlays directory is missing" {
+  local empty_base="${BATS_TEST_TMPDIR}/empty-base"
+  mkdir -p "$empty_base"
+  run make -C "$NETOPSKUBE_ROOT" apply-kpt-overlays \
+    BASE="$empty_base" NOK_KPT_DIR="$FIXTURE_NOK_KPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"No overlays directory, skipping"* ]]
+}
+
 @test "apply-kpt-overlays fails when nok-kpt directory is missing" {
   run make -C "$NETOPSKUBE_ROOT" apply-kpt-overlays \
     NOK_KPT_DIR="/tmp/nok-kpt-missing-$$"

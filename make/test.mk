@@ -9,8 +9,8 @@
 BATS ?= bats
 TEST_DIR ?= $(BASE)/test
 
-.PHONY: test test-unit test-integration test-smoke
-test: test-unit ## Run default test suite (unit tests, no cluster)
+.PHONY: test test-unit test-integration test-smoke test-coverage
+test: test-unit test-coverage ## Run default test suite and verify 100% unit scope coverage
 
 test-unit: check-tools ## Run BATS unit tests (no cluster required)
 	@command -v $(BATS) >/dev/null 2>&1 || { \
@@ -21,6 +21,10 @@ test-unit: check-tools ## Run BATS unit tests (no cluster required)
 	@$(BATS) --pretty $(TEST_DIR)/bats/unit/
 	@echo ""
 	@echo "--> TEST: Unit tests completed successfully."
+
+test-coverage: ## Verify 100% unit-test scope coverage (see test/coverage/unit-scope.txt)
+	@chmod +x $(TEST_DIR)/scripts/verify-coverage.sh
+	@$(TEST_DIR)/scripts/verify-coverage.sh
 
 test-integration: check-tools ## Run BATS integration tests (cluster required)
 	@command -v $(BATS) >/dev/null 2>&1 || { \

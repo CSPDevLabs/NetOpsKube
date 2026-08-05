@@ -17,27 +17,30 @@ Ensure `yq` is available (downloaded automatically by `make check-tools`).
 ## Run
 
 ```bash
-# Default: unit tests only
+# Default: unit tests + 100% unit-scope coverage report
 make test
 
 # Explicit targets
-make test-unit          # BATS unit tests (no cluster)
+make test-unit          # BATS unit tests only (32 tests)
+make test-coverage      # verify test/coverage/unit-scope.txt is fully covered
 make test-integration   # BATS integration tests (skipped unless enabled)
 make test-smoke         # existing make verify-lb-ips (cluster required)
 ```
 
 ### Console output
 
-BATS prints a per-test PASS/FAIL line and ends with a summary:
-
 ```text
-update-kpt-lb-setters.bats
- ✓ update-kpt-lb-setters writes LB IPs for a non-default KinD prefix
- ...
-6 tests, 0 failures
+32 tests, 0 failures
 
 --> TEST: Unit tests completed successfully.
+--> COVERAGE: 32/32 unit scope items covered — 100%
 ```
+
+### What “100% coverage” means
+
+Unit coverage is **100% of the Makefile logic listed in** `test/coverage/unit-scope.txt` — all testable shell/Makefile behavior that does not require a live KinD cluster, clab deploy, or Gitea API.
+
+Cluster-only flows (`try-nok`, `install-*-pkg`, GitOps, clab deploy) are covered separately via integration/smoke targets when a cluster is up.
 
 ### Integration tests
 
@@ -52,10 +55,14 @@ NOK_RUN_INTEGRATION_TESTS=yes make test-integration
 ```text
 test/
   bats/
-    unit/           # overlays, Makefile vars, KinD config, setter wiring
-    integration/    # verify-lb-ips against live cluster
+    unit/              # 32 tests — overlays, setters, vars, clab checks, …
+    integration/       # verify-lb-ips, verify-gnmic (cluster required)
+  coverage/
+    unit-scope.txt    # canonical list of unit-testable behaviors
+  scripts/
+    verify-coverage.sh
   fixtures/
-    nok-kpt/        # minimal apply-setters + Gitea manifests for unit tests
+    nok-kpt/          # minimal apply-setters + Gitea manifests
   helpers/
     common.bash
 ```
@@ -63,5 +70,6 @@ test/
 ## Adding tests
 
 1. Add a `*.bats` file under `test/bats/unit/` for logic that does not need a cluster.
-2. Use `KIND_NET_PREFIX=172.30.0` on the `make` command line to avoid Docker/KinD detection.
-3. Point `NOK_KPT_DIR` at a fixture copy via `setup_nok_kpt_fixture` in `helpers/common.bash`.
+2. Add a matching line to `test/coverage/unit-scope.txt` (required for `make test` to pass).
+3. Use `KIND_NET_PREFIX=172.30.0` on the `make` command line to avoid Docker/KinD detection.
+4. Point `NOK_KPT_DIR` at a fixture copy via `setup_nok_kpt_fixture` in `helpers/common.bash`.

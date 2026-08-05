@@ -15,3 +15,9 @@ setup() {
   [[ "$output" == *"metallb-pool-range: 172.30.0.100-172.30.0.120"* ]]
   [[ "$output" == *"gitea-ssh-lb-ip: 172.30.0.102"* ]]
 }
+
+@test "show-kind-lb-setters fails when KinD prefix is empty" {
+  run_make show-kind-lb-setters KIND_NET_PREFIX=""
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"not found"* ]]
+}

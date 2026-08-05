@@ -18,3 +18,12 @@ load '../../helpers/common.bash'
   [ "$(make_var KIND_LB_BNG_SYSLOG_HOST)" = "101" ]
   [ "$(make_var KIND_LB_DIA_SYSLOG_HOST)" = "103" ]
 }
+
+@test "Gitea and GitOps Makefile defaults are set" {
+  [ "$(make_var GITEA_HOST)" = "bng.nok.local" ]
+  [ "$(make_var GITEA_HTTP_PATH)" = "/gitea" ]
+  [ "$(make_var KPT_REPO_BRANCH)" = "feat/ip-setters" ]
+  [ "$(make_var KIND_LB_DEFAULT_PREFIX)" = "172.18.0" ]
+  [ "$(make_var KIND_LB_POOL_START)" = "100" ]
+  [ "$(make_var KIND_LB_POOL_END)" = "120" ]
+}

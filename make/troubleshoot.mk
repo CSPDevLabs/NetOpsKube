@@ -10,7 +10,7 @@ BNG_NAMESPACE ?= nok-bng
 
 .PHONY: help-troubleshoot
 help-troubleshoot: ## List troubleshooting targets only
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(lastword $(MAKEFILE_LIST)) | sort \
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' make/troubleshoot.mk | sort \
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 
 .PHONY: verify-gnmic-subscriptions
