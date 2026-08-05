@@ -24,26 +24,26 @@ This Makefile serves as a comprehensive automation script for setting up a devel
 To successfully run these Makefile targets, the following general requirements must be met:
 
 - **Operating System:** A Linux or macOS environment is expected, as indicated by the UNAME and OS variables.
-Docker: Docker must be installed and running, as Kind uses Docker containers for cluster nodes and Containerlab relies on Docker for network emulation.
+- **Docker:** Docker must be installed and running, as Kind uses Docker containers for cluster nodes and Containerlab relies on Docker for network emulation.
 - **Git:** Git must be installed to clone the necessary repositories.
 - **Internet Connectivity:** Required for downloading tools and cloning Git repositories.
-- **Nokia SRLinux Image & License (for deploy-bng):**
+- **Nokia SRLinux Image & License (for `make try-nok-bng` / `make deploy-clab-bng`):**
    - The registry.srlinux.dev/pub/nokia_srsim:25.10.R1 Docker image must be locally available (docker pull registry.srlinux.dev/pub/nokia_srsim:25.10.R1).
    - A valid Nokia SROS license file must be present at the path specified by SRSIM_LICENSE_FILE (default: $(NOK_CLABS_DIR)/nok-bng/srsim-lic-25.txt).
-- **IP Segments:** This deployment uses **172.18.0.0/24** Network for KinD and Services, and **172.21.20.0/24** for containerlab   
+- **IP Segments:** KinD picks its Docker network at runtime (e.g. `172.18.0.0/24` or `172.19.0.0/16`). MetalLB and LoadBalancer IPs in `nok-kpt` are templated on `172.18.0.x` and **auto-patched** by `make cluster-up` to match the KinD node prefix. Pod (`10.244.0.0/16`) and service (`10.96.0.0/12`) subnets are fixed in `build/kind-cluster.yaml`. Containerlab uses **172.21.20.0/24** (BNG) on a separate Docker network.
 
 ### High-Level Functionality
 The Makefile orchestrates several key areas:
 - **Tool Management:** It automatically downloads, installs, and manages versions of essential command-line tools like kind, kubectl, helm, kpt, yq, k9s, gh, and containerlab into a dedicated tools/ directory.
-- **sudo Access:** Needs sudo privileges for containerlab montly (for `make try-nok` shouldn't be required, just acess to docker would be suffice)
+- **sudo Access:** Containerlab operations require sudo privileges (for `make try-nok`, sudo is not required if your user can access Docker).
 - **Kubernetes Cluster Lifecycle (Kind):** It provides targets to create, configure, and delete a local Kubernetes cluster using Kind, including dynamic configuration of API server addresses and port mappings.
-- ***Git Repository Management:** It handles the cloning of specific Git repositories (**CSPDevLabs/kpt** and **CSPDevLabs/nok-clabs**) which contain the Kubernetes manifests and Containerlab topologies.
+- **Git Repository Management:** It handles the cloning of specific Git repositories (**CSPDevLabs/kpt** and **CSPDevLabs/nok-clabs**) which contain the Kubernetes manifests and Containerlab topologies.
 - **KPT Package Deployment:** It defines a macro (INSTALL_KPT_PACKAGE) to simplify the deployment and reconciliation of Kubernetes resource packages using kpt live apply, ensuring applications are correctly installed and managed within the cluster.
 - **Containerlab Integration:** It includes targets to deploy and destroy network topologies defined in Containerlab, specifically for a Nokia BNG (Broadband Network Gateway) setup, and checks for necessary Docker images and license files.
 - **Service Exposure:** It includes a mechanism to port-forward the ingress controller service, making applications accessible from the host machine.
 
-### Key Targets: try-nok and deploy-bng
-The Makefile does not define an all target. The most comprehensive targets for setting up the environment are try-nok and deploy-bng.
+### Key Targets: try-nok and try-nok-bng
+The Makefile does not define an all target. The most comprehensive targets for setting up the environment are `try-nok` and `try-nok-bng`.
 
 #### make try-nok
 Purpose: This target sets up the foundational Kubernetes environment, including the Kind cluster and core services like an ingress controller and a load balancer. It prepares the cluster for subsequent application deployments.
@@ -58,7 +58,7 @@ Purpose: This target extends the bng setup by deploying Gitea application for Gi
 
 You can deploy the cluster and base app using:
 ```bash
-git clone https://github.com/CSPDevLabs/NetOpsKube # Clone Reop for CLuster
+git clone https://github.com/CSPDevLabs/NetOpsKube # Clone repo for cluster setup
 cd NetOpsKube
 make try-nok # install KinD cluster and Base Packages
 ```
@@ -72,7 +72,12 @@ make delete-cluster
 ## Deploy Cluster and BNG all together
 Deploy Cluster , Base Apps , BNG Apps and Containerlab (requires license file and docker image, check requirements on above sections for details)
 ```bash
-sudo make deploy bng
+make try-nok-bng
+```
+
+If the containerlab topology needs to be redeployed separately:
+```bash
+sudo make deploy-clab-bng
 ```
 
 To generate BNG subscribe sessions and traffic:
@@ -83,7 +88,7 @@ This use case is based in a previous clab deployment. More details at https://gi
 
 ### Access the NetOpsKube Portal
 You can access the BNG service at http://bng.nok.local:8080/
-- Add bng.nok.local to the address server in /etc/hosts for your browser to find
+- Add `bng.nok.local` to your `/etc/hosts` file so your browser can resolve it.
 
 BNG use case can be tested locally via:
 ```bash
