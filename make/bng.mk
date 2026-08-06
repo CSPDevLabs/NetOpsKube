@@ -51,21 +51,21 @@ destroy-clab-bng: check-tools git-clone-clab ## Destroys the Containerlab BNG to
 
 .PHONY: install-bng-pkg
 install-bng-pkg: check-tools git-clone-kpt ## Installs the base kpt package from ./nok-kpt/nok-bng
-	@$(call INSTALL_KPT_PACKAGE,$(NOK_KPT_DIR)/nok-bng,nok-bng,"--reconcile-timeout=5m", "--inventory-policy=adopt")
+	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-bng,nok-bng,"--reconcile-timeout=5m", "--inventory-policy=adopt")
 
 .PHONY: gitea-create-bng-repo
 gitea-create-bng-repo:
 	@echo "--> GITEA: Ensuring repo $(FLUX_BNG_REPO) exists"
 	@$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) \
 	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
-	  http://$(GITEA_HOST)/api/v1/repos/$(GITEA_ADMIN_USER)/$(FLUX_BNG_REPO) \
+	  http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/repos/$(GITEA_ADMIN_USER)/$(FLUX_BNG_REPO) \
 	  >/dev/null || \
 	$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) \
 	  -X POST \
 	  -H "Content-Type: application/json" \
 	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
 	  -d '{"name":"$(FLUX_BNG_REPO)", "description": "BNG resources for Network Observability and Conf Management","private":false,"auto_init":true}' \
-	  http://$(GITEA_HOST)/api/v1/user/repos
+	  http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/user/repos
 
 .PHONY: flux-create-bng-secret
 flux-create-bng-secret:

@@ -47,19 +47,36 @@ endif
 # Make sure environment variables are set before using them `export HTTP_PROXY=...`
 # Proxy settings: inherited from the shell. Set HTTP_PROXY / HTTPS_PROXY /
 # NO_PROXY in your environment before running the Makefile.
-export HTTP_PROXY ?=
-export HTTPS_PROXY ?=
+export HTTP_PROXY ?= http://10.158.100.2:8080
+export HTTPS_PROXY ?= http://10.158.100.2:8080
 # NO_PROXY_LOOPBACK := 127.0.0.1,localhost,::1
 # NO_PROXY_RFC1918  := 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,10.96.0.0/12,10.244.0.0/16
 # NO_PROXY_SUFFIXES := .nok.local,.svc,.svc.cluster.local
 # NO_PROXY_SHORT    := gitea.nok.local,bbm-grafana-svc,bbm-grafana-svc.nok-bbm,bbm-grafana-svc.nok-bbm.svc,bbm-grafana-svc.nok-bbm.svc.cluster.local,bbm-prometheus-svc,bbm-prometheus-svc.nok-bbm,bbm-prometheus-svc.nok-bbm.svc,bbm-prometheus-svc.nok-bbm.svc.cluster.local
 # NO_PROXY := $(NO_PROXY_LOOPBACK),$(NO_PROXY_RFC1918),$(NO_PROXY_SUFFIXES),$(NO_PROXY_SHORT)
-export NO_PROXY := 127.0.0.1,localhost,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,10.96.0.0/12,10.244.0.0/16,gitea.nok.local,.nok.local,.svc,.svc.cluster.local,bbm-grafana-svc,bbm-grafana-svc.nok-bbm,bbm-grafana-svc.nok-bbm.svc,bbm-grafana-svc.nok-bbm.svc.cluster.local,bbm-prometheus-svc,bbm-prometheus-svc.nok-bbm,bbm-prometheus-svc.nok-bbm.svc,bbm-prometheus-svc.nok-bbm.svc.cluster.local
+export NO_PROXY := 127.0.0.1,localhost,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,10.96.0.0/12,10.244.0.0/16,gitea.nok.local,.nok.local,.svc,.svc.cluster.local,bbm-grafana-svc,bbm-grafana-svc.nok-bbm,bbm-grafana-svc.nok-bbm.svc,bbm-grafana-svc.nok-bbm.svc.cluster.local,bbm-prometheus-svc,bbm-prometheus-svc.nok-bbm,bbm-prometheus-svc.nok-bbm.svc,bbm-prometheus-svc.nok-bbm.svc.cluster.local,bng.nok.local
 
 
 KIND_CLUSTER_NAME ?= nok-demo
 KIND_CONFIG_REAL_LOC ?= build/kind-cluster.yaml
 KIND_LAUNCH_CONFIG ?= /tmp/kind-config-$(KIND_CLUSTER_NAME).yaml
+
+# KinD Docker network prefix (e.g. 172.18.0). LB IPs are written into nok-kpt
+# apply-setters.yaml before package install (CSPDevLabs/kpt#27).
+KIND_LB_DEFAULT_PREFIX ?= 172.18.0
+KIND_NET_PREFIX = $(shell docker inspect \
+	-f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' \
+	$(KIND_CLUSTER_NAME)-control-plane 2>/dev/null | \
+	awk -F. '{print $$1 "." $$2 "." $$3}')
+
+# Host octets for LoadBalancer services on the KinD Docker /24 (kpt#27 setters).
+KIND_LB_INGRESS_HOST ?= 100
+KIND_LB_BNG_SYSLOG_HOST ?= 101
+KIND_LB_GITEA_SSH_HOST ?= 102
+KIND_LB_DIA_SYSLOG_HOST ?= 103
+KIND_LB_BLACKBOX_HOST ?= 111
+KIND_LB_POOL_START ?= 100
+KIND_LB_POOL_END ?= 120
 
 # Optional: Set API server address if you need to access it from outside Docker
 # KIND_API_SERVER_ADDRESS ?= 127.0.0.1
@@ -88,6 +105,7 @@ SRSIM_LICENSE_FILE ?= $(NOK_CLABS_DIR)/nok-bng/srsim-lic-25.txt
 
 NOK_KPT_DIR ?= $(BASE)/nok-kpt
 KPT_REPO_URL ?= https://github.com/CSPDevLabs/kpt
+KPT_REPO_BRANCH ?= nok-restructure
 
 NOK_CLABS_DIR ?= $(BASE)/nok-clabs
 CLABS_REPO_URL ?= https://github.com/CSPDevLabs/nok-clabs
@@ -95,7 +113,7 @@ CLABS_REPO_URL ?= https://github.com/CSPDevLabs/nok-clabs
 # Internal helper for output indentation
 INDENT_OUT ?= sed 's/^/    /'
 ### Curl options:
-CURL := curl --silent --fail --show-error
+CURL := curl --silent --fail --show-error --noproxy "*"
 
 ## Tools versions
 ### ---------------------------------------------------------------------------|
@@ -134,9 +152,10 @@ DOWNLOAD_TOOLS_LIST := $(KIND) $(KUBECTL) $(HELM) $(KPT) $(K9S) $(YQ) $(GH) $(CL
 
 # --- Flux & Gitea GitOps Configuration ---
 GITOPS_NAMESPACE ?= nok-git
-GITEA_HOST ?= gitea.nok.local
-GITEA_IP ?= 172.18.0.100
-GITEA_SSH_HOST ?= 172.18.0.102
+GITEA_HOST ?= bng.nok.local
+GITEA_HTTP_PATH ?= /gitea
+GITEA_IP = $(KIND_NET_PREFIX).$(KIND_LB_INGRESS_HOST)
+GITEA_SSH_HOST = $(KIND_NET_PREFIX).$(KIND_LB_GITEA_SSH_HOST)
 GITEA_ADMIN_USER ?= nok
 GITEA_ADMIN_PASS ?= N0kP4ssw0rd
 GITEA_ADMIN_EMAIL ?= nok@example.com
@@ -180,7 +199,8 @@ define INSTALL_KPT_PACKAGE
 	}
 endef
 
-# The same as INSTALL_KPT_PACKAGE, but also runs kpt fn render to apply setters.
+# Runs kpt fn render (pipeline apply-setters.yaml) then kpt live apply.
+# LB IPs must be written first via update-kpt-lb-setters.
 define INSTALL_KPT_PACKAGE_WITH_SETTERS
 	{	\
 		echo -e "--> INSTALL: [\033[1;34m$2\033[0m] - Applying kpt package"									;\
@@ -196,6 +216,25 @@ define INSTALL_KPT_PACKAGE_WITH_SETTERS
 		echo -e "--> INSTALL: [\033[0;32m$2\033[0m] - Applied and reconciled package"						;\
 	}
 endef
+
+.PHONY: os-shell 
+os-shell: ## Verify the OS, ARCH, SHELL, DISTRO_ID, and ARCH_QUERY, output as JSON
+	@echo "{"
+	@echo "    \"OS\": \"$(OS)\","
+	@echo "    \"UNAME\": \"$(UNAME)\","
+	@echo "    \"ARCH\": \"$(ARCH)\","
+	@echo "    \"SHELL\": \"$(SHELL)\","
+	@echo "    \"DISTRO_ID\": \"$(DISTRO_ID)\","
+	@echo "    \"ARCH_QUERY\": \"$(ARCH_QUERY)\""
+	@echo "}"
+
+.PHONY: proxy-env
+proxy-env: ## Verify proxy environment variables are set
+	@echo "{"
+	@echo "    \"HTTP_PROXY\": \"$(HTTP_PROXY)\","
+	@echo "    \"HTTPS_PROXY\": \"$(HTTPS_PROXY)\","
+	@echo "    \"NO_PROXY\": \"$(NO_PROXY)\""
+	@echo "}"
 
 # --- Tool Download Rules ---
 $(KIND): | $(BASE) $(TOOLS) ; $(info --> TOOLS: Ensuring kind is present in $(KIND))

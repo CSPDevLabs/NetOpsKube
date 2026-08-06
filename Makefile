@@ -57,25 +57,6 @@ PROXY_DEPLOYMENTS += \
 	nok-base:oauth2-proxy
 endif
 
-.PHONY: os-shell 
-os-shell: ## Verify the OS, ARCH, SHELL, DISTRO_ID, and ARCH_QUERY, output as JSON
-	@echo "{"
-	@echo "    \"OS\": \"$(OS)\","
-	@echo "    \"UNAME\": \"$(UNAME)\","
-	@echo "    \"ARCH\": \"$(ARCH)\","
-	@echo "    \"SHELL\": \"$(SHELL)\","
-	@echo "    \"DISTRO_ID\": \"$(DISTRO_ID)\","
-	@echo "    \"ARCH_QUERY\": \"$(ARCH_QUERY)\""
-	@echo "}"
-
-.PHONY: proxy-env
-proxy-env: ## Verify proxy environment variables are set
-	@echo "{"
-	@echo "    \"HTTP_PROXY\": \"$(HTTP_PROXY)\","
-	@echo "    \"HTTPS_PROXY\": \"$(HTTPS_PROXY)\","
-	@echo "    \"NO_PROXY\": \"$(NO_PROXY)\""
-	@echo "}"
-
 ## Deploy Base Apps, clone kpt and clab repos, install base packages / load balancer / prometheus and gnmic operators, port forward
 .PHONY: try-nok
 try-nok: check-tools cluster-up cluster-wait-for-node-ready git-clone-kpt generate-portal-pv git-clone-clab install-base-pkg install-lb-pkg install-prom-oper install-gnmic-oper start-ingress-port-forward install-bbm-pkg install-base-final configure-auth
@@ -121,6 +102,48 @@ cluster-up: $(KIND_CONFIG_REAL_LOC) ## Bring up the KinD cluster
 			echo "--> KIND: Cluster named $(KIND_CLUSTER_NAME) already exists" ;\
 		fi ;\
 	}
+	@$(MAKE) update-kpt-lb-setters
+
+.PHONY: update-kpt-lb-setters
+update-kpt-lb-setters: $(YQ) ## Write KinD LB IPs into nok-kpt apply-setters.yaml (kpt#27)
+	@IP_PREFIX="$(KIND_NET_PREFIX)" ;\
+	if [ -z "$$IP_PREFIX" ]; then \
+		echo "Error: KinD cluster '$(KIND_CLUSTER_NAME)' not found — cannot detect network prefix" ;\
+		exit 1 ;\
+	fi ;\
+	if [ ! -d "$(NOK_KPT_DIR)" ]; then \
+		echo "Error: $(NOK_KPT_DIR) not found — run 'make git-clone-kpt' first" ;\
+		exit 1 ;\
+	fi ;\
+	echo "--> KPT: KinD LB prefix $$IP_PREFIX → apply-setters.yaml (template: $(KIND_LB_DEFAULT_PREFIX))" ;\
+	$(YQ) eval '.data."metallb-pool-range" = "'$$IP_PREFIX'.$(KIND_LB_POOL_START)-'$$IP_PREFIX'.$(KIND_LB_POOL_END)"' \
+		-i $(NOK_KPT_DIR)/nok-lb/apply-setters.yaml ;\
+	$(YQ) eval '.data."ingress-lb-ip" = "'$$IP_PREFIX'.$(KIND_LB_INGRESS_HOST)"' \
+		-i $(NOK_KPT_DIR)/nok-base/apply-setters.yaml ;\
+	$(YQ) eval '.data."syslog-lb-ip" = "'$$IP_PREFIX'.$(KIND_LB_BNG_SYSLOG_HOST)"' \
+		-i $(NOK_KPT_DIR)/nok-bng/apply-setters.yaml ;\
+	$(YQ) eval '.data."syslog-lb-ip" = "'$$IP_PREFIX'.$(KIND_LB_DIA_SYSLOG_HOST)"' \
+		-i $(NOK_KPT_DIR)/nok-dia/apply-setters.yaml ;\
+	$(YQ) eval '.data."gitea-ssh-lb-ip" = "'$$IP_PREFIX'.$(KIND_LB_GITEA_SSH_HOST)"' \
+		-i $(NOK_KPT_DIR)/nok-git/apply-setters.yaml ;\
+	$(YQ) eval '.data."blackbox-lb-ip" = "'$$IP_PREFIX'.$(KIND_LB_BLACKBOX_HOST)"' \
+		-i $(NOK_KPT_DIR)/nok-bbm/apply-setters.yaml
+
+.PHONY: show-kind-lb-setters
+show-kind-lb-setters: ## Show KinD LB prefix and apply-setters.yaml values (kpt#27)
+	@IP_PREFIX="$(KIND_NET_PREFIX)" ;\
+	if [ -z "$$IP_PREFIX" ]; then \
+		echo "Error: KinD cluster '$(KIND_CLUSTER_NAME)' not found" ; exit 1 ;\
+	fi ;\
+	echo "--> KIND: KinD LB network prefix is $$IP_PREFIX (template: $(KIND_LB_DEFAULT_PREFIX))" ;\
+	echo "--> KPT: apply-setters.yaml values (run 'make update-kpt-lb-setters' to refresh):" ;\
+	for pkg in nok-lb nok-base nok-bng nok-dia nok-git nok-bbm; do \
+		f="$(NOK_KPT_DIR)/$$pkg/apply-setters.yaml" ;\
+		if [ -f "$$f" ]; then \
+			echo "    $$pkg:" ;\
+			$(YQ) eval '.data | to_entries | .[] | "      " + .key + ": " + .value' "$$f" ;\
+		fi ;\
+	done
 
 .PHONY: cluster-wait-for-node-ready
 cluster-wait-for-node-ready: ## Wait for the Kubernetes control plane node to be ready
@@ -159,20 +182,26 @@ create-tool-aliases: $(TOOLS) ## Create aliases for versioned binaries in the to
 
 .PHONY: help
 help: ## Display this help message
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-25s\033[0m %s\n", $$1, $$2}'
+	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-25s\033[0m %s\n", $$1, $$2}'
+
+	
 
 # --- Git Clone Targets ---
+
+## Clones the CSPDevLabs/kpt repository into ./nok-kpt
 .PHONY: git-clone-kpt
-git-clone-kpt: ## Clones the CSPDevLabs/kpt repository into ./nok-kpt
-	@echo "--> GIT: Cloning $(KPT_REPO_URL) into $(NOK_KPT_DIR)"
+git-clone-kpt:
+	@echo "--> GIT: Cloning $(KPT_REPO_URL) ($(KPT_REPO_BRANCH)) into $(NOK_KPT_DIR)"
 	@if [ ! -d "$(NOK_KPT_DIR)" ]; then \
-		git clone -b nok-restructure $(KPT_REPO_URL) $(NOK_KPT_DIR) ;\
+		git clone -b $(KPT_REPO_BRANCH) $(KPT_REPO_URL) $(NOK_KPT_DIR) ;\
 	else \
 		echo "--> GIT: $(NOK_KPT_DIR) already exists. Skipping clone." ;\
+		echo "--> GIT: Ensure branch $(KPT_REPO_BRANCH) is checked out (override with NOK_KPT_DIR for a local kpt checkout)." ;\
 	fi
 
+## Clones the CSPDevLabs/nok-clabs repository into ./nok-clabs
 .PHONY: git-clone-clab
-git-clone-clab: ## Clones the CSPDevLabs/nok-clabs repository into ./nok-clabs
+git-clone-clab:
 	@echo "--> GIT: Cloning $(CLABS_REPO_URL) into $(NOK_CLABS_DIR)"
 	@if [ ! -d "$(NOK_CLABS_DIR)" ]; then \
 		git clone -b nok-restructure $(CLABS_REPO_URL) $(NOK_CLABS_DIR) ;\
@@ -180,8 +209,9 @@ git-clone-clab: ## Clones the CSPDevLabs/nok-clabs repository into ./nok-clabs
 		echo "--> GIT: $(NOK_CLABS_DIR) already exists. Skipping clone." ;\
 	fi
 
+## Checks for required Docker image and SROS license file for Containerlab
 .PHONY: check-clab-prerequisites
-check-clab-prerequisites: ## Checks for required Docker image and SROS license file for Containerlab
+check-clab-prerequisites:
 	@echo "--> CLAB: Checking prerequisites for CLAB deployment..."
 	@{ \
 		if [ -z "$$(docker images -q $(SRLINUX_IMAGE) 2> /dev/null)" ]; then \
@@ -197,6 +227,7 @@ check-clab-prerequisites: ## Checks for required Docker image and SROS license f
 		fi ;\
 		echo "--> CLAB: Nokia SROS license file found." ;\
 	}
+
 
 # --- Directory Creation Rules ---
 $(BASE):
@@ -257,21 +288,24 @@ start-ingress-port-forward: ## Starts background port-forward for ingress-nginx-
 	@echo "--> K8S: Ingress port-forward started in background."
 	@echo "    To stop it, find the process using 'ps aux | grep \"kubectl port-forward\"' and 'kill <PID>'."
 
+## Installs the base kpt package from ./nok-kpt/nok-base
 .PHONY: install-base-pkg
-install-base-pkg: ## Installs the base kpt package from ./nok-kpt/nok-base
-	@$(call INSTALL_KPT_PACKAGE,$(NOK_KPT_DIR)/nok-base,nok-base,"--reconcile-timeout=5m", "--inventory-policy=adopt")
+install-base-pkg: update-kpt-lb-setters
+	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-base,nok-base,"--reconcile-timeout=5m", "--inventory-policy=adopt")	
 
 .PHONY: install-base-final
-install-base-final:
-	@$(call INSTALL_KPT_PACKAGE,$(NOK_KPT_DIR)/nok-base,nok-base,"--reconcile-timeout=5m", "--inventory-policy=adopt")
+install-base-final: update-kpt-lb-setters
+	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-base,nok-base,"--reconcile-timeout=5m", "--inventory-policy=adopt")	
 
+## Installs the base kpt package from ./nok-kpt/nok-git
 .PHONY: install-git-pkg
-install-git-pkg: install-lb-pkg  ## Installs the base kpt package from ./nok-kpt/nok-git
-	@$(call INSTALL_KPT_PACKAGE,$(NOK_KPT_DIR)/nok-git,nok-git,"--reconcile-timeout=5m", "--inventory-policy=adopt")
+install-git-pkg: install-lb-pkg
+	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-git,nok-git,"--reconcile-timeout=5m", "--inventory-policy=adopt")
 
+## Installs the base kpt package from ./nok-kpt/nok-lb
 .PHONY: install-lb-pkg
-install-lb-pkg: wait-for-metallb-ready ## Installs the base kpt package from ./nok-kpt/nok-lb
-	@$(call INSTALL_KPT_PACKAGE,$(NOK_KPT_DIR)/nok-lb,nok-lb,"--reconcile-timeout=5m", "")	
+install-lb-pkg: wait-for-metallb-ready
+	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-lb,nok-lb,"--reconcile-timeout=5m", "")		
 
 .PHONY: wait-for-metallb-ready
 wait-for-metallb-ready: ## Wait for the Kubernetes Metallb node to be ready
@@ -280,10 +314,11 @@ wait-for-metallb-ready: ## Wait for the Kubernetes Metallb node to be ready
 		START=$$(date +%s) ; \
 		$(KUBECTL) wait --for=condition=available deployment/controller -n metallb-system --timeout=5m --timeout=5m ; \
 		echo "--> KIND: Node ready check took $$(( $$(date +%s) - $$START ))s" ; \
-	}
+	}	
 
+## Installs the BBM (self-monitotoring and observability) kpt package from ./nok-kpt/nok-bbm
 .PHONY: install-bbm-pkg
-install-bbm-pkg: ## Installs the BBM (self-monitotoring and observability) kpt package from ./nok-kpt/nok-bbm
+install-bbm-pkg:
 	@echo "--> INSTALL: [\033[1;34mBBM\033[0m] - Applying kpt package with setters"
 	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-bbm,nok-bbm,"--reconcile-timeout=5m", "--inventory-policy=adopt")
 
@@ -346,7 +381,7 @@ gitea-create-flux-repo:
 		if $(CURL) --silent --fail \
 			--resolve $(GITEA_HOST):80:$(GITEA_IP) \
 			-u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
-			http://$(GITEA_HOST)/api/v1/user/repos \
+			http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/user/repos \
 			>/dev/null; then \
 			echo "--> GITEA: API is available"; \
 			break; \
@@ -363,7 +398,7 @@ gitea-create-flux-repo:
 	@$(CURL) --silent --fail \
 	  --resolve $(GITEA_HOST):80:$(GITEA_IP) \
 	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
-	  http://$(GITEA_HOST)/api/v1/repos/$(GITEA_ADMIN_USER)/$(FLUX_GIT_REPO) \
+	  http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/repos/$(GITEA_ADMIN_USER)/$(FLUX_GIT_REPO) \
 	  >/dev/null || \
 	$(CURL) --silent --fail \
 	  --resolve $(GITEA_HOST):80:$(GITEA_IP) \
@@ -371,7 +406,7 @@ gitea-create-flux-repo:
 	  -H "Content-Type: application/json" \
 	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
 	  -d '{"name":"$(FLUX_GIT_REPO)","private":false,"auto_init":true}' \
-	  http://$(GITEA_HOST)/api/v1/user/repos
+	  http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/user/repos
 
 
 .PHONY: gitea-add-ssh-key
@@ -395,18 +430,18 @@ gitea-add-ssh-key:
 	\
 	SSH_KEY="$$(cat $(FLUX_SSH_KEY).pub)"; \
 	echo "--> SSH: Using Public Key: $$SSH_KEY"; \
-	if $(CURL) --resolve $(GITEA_HOST):80:172.18.0.100 \
+	if $(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) \
 	     -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
-	     http://$(GITEA_HOST)/api/v1/user/keys | \
+	     http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/user/keys | \
 	     jq -r '.[].key' | grep -Fxq "$$SSH_KEY"; then \
 		echo "--> GITEA: SSH key already registered, skipping"; \
 	else \
 		echo "--> GITEA: Registering SSH key"; \
-		$(CURL) --resolve $(GITEA_HOST):80:172.18.0.100 -X POST \
+		$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) -X POST \
 		  -H "Content-Type: application/json" \
 		  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
 		  -d "{\"title\":\"flux ssh key\",\"key\":\"$$SSH_KEY\"}" \
-		  http://$(GITEA_HOST)/api/v1/user/keys; \
+		  http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/user/keys; \
 	fi; \
 	\
 	echo "--> GITEA: Ensuring $(GITEA_SSH_HOST) is in ~/.ssh/known_hosts"; \
@@ -421,7 +456,7 @@ gitea-add-ssh-key:
 flux-bootstrap: check-tools gitea-create-admin gitea-create-flux-repo gitea-add-ssh-key
 	@echo "--> GITEA: Ensuring repository $(FLUX_GIT_REPO) exists"
 	@$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
-	  http://$(GITEA_HOST)/api/v1/repos/$(GITEA_ADMIN_USER)/$(FLUX_GIT_REPO) \
+	  http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/repos/$(GITEA_ADMIN_USER)/$(FLUX_GIT_REPO) \
 	  >/dev/null || \
 	@echo "--> FLUX: Bootstrapping cluster"
 
@@ -438,7 +473,7 @@ flux-bootstrap: check-tools gitea-create-admin gitea-create-flux-repo gitea-add-
 	  --private-key-file=$(FLUX_SSH_KEY) \
 	  --ssh-key-algorithm=ed25519 \
 	  --silent \
-	  --verbose
+	  --verbose  
 
 .PHONY: set-proxy-env
 set-proxy-env:
