@@ -47,8 +47,8 @@ endif
 # Make sure environment variables are set before using them `export HTTP_PROXY=...`
 # Proxy settings: inherited from the shell. Set HTTP_PROXY / HTTPS_PROXY /
 # NO_PROXY in your environment before running the Makefile.
-export HTTP_PROXY ?= http://10.158.100.2:8080
-export HTTPS_PROXY ?= http://10.158.100.2:8080
+export HTTP_PROXY ?=
+export HTTPS_PROXY ?=
 # NO_PROXY_LOOPBACK := 127.0.0.1,localhost,::1
 # NO_PROXY_RFC1918  := 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,10.96.0.0/12,10.244.0.0/16
 # NO_PROXY_SUFFIXES := .nok.local,.svc,.svc.cluster.local
