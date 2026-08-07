@@ -113,7 +113,7 @@ CLABS_REPO_URL ?= https://github.com/CSPDevLabs/nok-clabs
 # Internal helper for output indentation
 INDENT_OUT ?= sed 's/^/    /'
 ### Curl options:
-CURL := curl --silent --fail --show-error --noproxy "*"
+CURL := curl --silent --fail --show-error --noproxy "bng.nok.local"
 
 ## Tools versions
 ### ---------------------------------------------------------------------------|
