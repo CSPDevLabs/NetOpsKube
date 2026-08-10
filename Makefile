@@ -630,6 +630,18 @@ install-dia-pkg: check-tools git-clone-kpt install-base-pkg install-lb-pkg ## In
 install-git-pkg: check-tools git-clone-kpt install-base-pkg install-lb-pkg ## Installs the base kpt package from ./nok-kpt/nok-git
 	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-git,nok-git,"--reconcile-timeout=5m", "--inventory-policy=adopt")	
 
+.PHONY: install-mcp-bng-pkg
+install-mcp-bng-pkg: ## check-tools git-clone-kpt install-base-pkg install-lb-pkg ## Installs the MCP controller kpt package from ./nok-kpt/nok-base-mcp-bng
+	@echo -e "--> INSTALL: [\033[1;34mMCP BNG\033[0m] - Checking prerequisites..."
+	@if ! $(KUBECTL) version --client &>/dev/null; then \
+		echo "[ERROR]: kubectl is not working or not configured. Please ensure your kubeconfig is set." >&2; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(NOK_KPT_DIR)/nok-base-mcp-bng/Kptfile" ]; then \
+		echo "[ERROR]: MCP BNG kpt package not found at $(NOK_KPT_DIR)/nok-base-mcp-bng" >&2; \
+		exit 1; \
+	fi
+	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-base-mcp-bng,nok-base-mcp-bng,"--reconcile-timeout=5m", "--inventory-policy=adopt")
 
 .PHONY: install-prom-oper
 install-prom-oper: $(KUBECTL) ## Installs the Prometheus Operator manifest
