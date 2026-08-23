@@ -32,8 +32,8 @@ git-clone-clab skips clone when nok-clabs already exists
 check-clab-prerequisites passes when image and license exist
 check-clab-prerequisites fails when license file is missing
 
-overlay source manifests define portal Gitea menu entry
-overlay source manifests define gitea-proxy ExternalName service
+kpt recipe portal menu opens apps in-portal (not new tab)
+kpt recipe defines gitea-proxy ExternalName service
 
 help-troubleshoot lists troubleshooting targets
 os-shell outputs platform JSON
@@ -43,3 +43,9 @@ make help exits successfully
 make test target is documented in help
 
 verify-gnmic-subscriptions warns when no targets exist
+
+recipe-verify targets are listed in help-recipe-verify
+verify-recipe fails for unknown recipe name
+NOK_VERIFY_BEFORE_PUBLISH defaults to yes
+NOK_RECIPE_VERIFY_LEVEL defaults to install
+FLUX_DIA_KUST_PREFIX defaults to dia-

@@ -21,26 +21,59 @@ Ensure `yq` is available (downloaded automatically by `make check-tools`).
 make test
 
 # Explicit targets
-make test-unit          # BATS unit tests only (32 tests)
+make test-unit          # BATS unit tests only
 make test-coverage      # verify test/coverage/unit-scope.txt is fully covered
 make test-integration   # BATS integration tests (skipped unless enabled)
-make test-smoke         # existing make verify-lb-ips (cluster required)
+make test-smoke         # verify-lb-ips (cluster required)
+
+# Epic 9 — per-recipe health checks (cluster required)
+make test-recipe-bng                              # install-level (pods, portal, prometheus)
+make test-recipe-dia
+make test-recipes                                 # both recipes, install-level
+NOK_RECIPE_VERIFY_LEVEL=full make test-recipe-bng # + gNMIc subs + metrics (needs clab)
 ```
 
 ### Console output
 
 ```text
-32 tests, 0 failures
+36 tests, 0 failures
 
 --> TEST: Unit tests completed successfully.
---> COVERAGE: 32/32 unit scope items covered — 100%
+--> COVERAGE: 36/36 unit scope items covered — 100%
 ```
 
 ### What “100% coverage” means
 
 Unit coverage is **100% of the Makefile logic listed in** `test/coverage/unit-scope.txt` — all testable shell/Makefile behavior that does not require a live KinD cluster, clab deploy, or Gitea API.
 
-Cluster-only flows (`try-nok`, `install-*-pkg`, GitOps, clab deploy) are covered separately via integration/smoke targets when a cluster is up.
+Cluster-only flows (`try-nok`, `install-*-pkg`, GitOps, clab deploy, recipe verification) are covered via integration/smoke targets when a cluster is up.
+
+## Epic 9 — per-recipe integration verification
+
+Epic 9 spans **kpt**, **netopskube**, and **nok-controller**. See `docs/EPIC9.md` for the full model.
+
+```bash
+make test-epic9          # unit tests + kpt package validation (no cluster)
+make test-kpt            # kpt BNG/DIA validate only
+```
+
+After deploying a recipe (`make install-bng-pkg` or full `make try-nok-bng`):
+
+| Check | install level | full level |
+|-------|---------------|------------|
+| Pods Running/Completed | yes | yes |
+| Portal `/healthz` | yes | yes |
+| Prometheus Ready | yes | yes |
+| gNMIc subscriptions running | — | yes |
+| gNMIc metrics in Prometheus | — | yes |
+
+```bash
+make verify-recipe-bng
+make verify-recipe-dia
+NOK_RECIPE_VERIFY_LEVEL=full make verify-recipe-bng   # after clab + gitops
+```
+
+**Pre-publish gate:** `push-bng-manifests` and `push-dia-manifests` run full-level verification by default (`NOK_VERIFY_BEFORE_PUBLISH=yes`). A broken recipe blocks manifest publish to Gitea. Skip with `NOK_VERIFY_BEFORE_PUBLISH=no` when no cluster is available.
 
 ### Integration tests
 
@@ -48,6 +81,9 @@ Integration tests are **skipped by default**. Enable when a cluster is up:
 
 ```bash
 NOK_RUN_INTEGRATION_TESTS=yes make test-integration
+
+# Full recipe checks (containerlab + gitops deployed):
+NOK_RUN_INTEGRATION_TESTS=yes NOK_RUN_FULL_RECIPE_TESTS=yes make test-integration
 ```
 
 ## Layout
@@ -55,8 +91,8 @@ NOK_RUN_INTEGRATION_TESTS=yes make test-integration
 ```text
 test/
   bats/
-    unit/              # 32 tests — overlays, setters, vars, clab checks, …
-    integration/       # verify-lb-ips, verify-gnmic (cluster required)
+    unit/              # Makefile/setter logic — no cluster
+    integration/       # verify-lb-ips, verify-gnmic, recipe-bng, recipe-dia
   coverage/
     unit-scope.txt    # canonical list of unit-testable behaviors
   scripts/
@@ -65,6 +101,8 @@ test/
     nok-kpt/          # minimal apply-setters + Gitea manifests
   helpers/
     common.bash
+make/
+  recipe-verify.mk    # Epic 9 per-recipe health + metrics checks
 ```
 
 ## Adding tests
