@@ -9,7 +9,7 @@
 BATS ?= bats
 TEST_DIR ?= $(BASE)/test
 
-.PHONY: test test-unit test-integration test-smoke test-coverage
+.PHONY: test test-unit test-integration test-smoke test-coverage test-recipe-bng test-recipe-dia test-recipes test-kpt test-epic9
 test: test-unit test-coverage ## Run default test suite and verify 100% unit scope coverage
 
 test-unit: check-tools ## Run BATS unit tests (no cluster required)
@@ -41,3 +41,31 @@ test-smoke: check-tools ## Run Makefile smoke verifications (cluster required)
 	@$(MAKE) verify-lb-ips
 	@echo ""
 	@echo "--> TEST: Smoke checks completed successfully."
+
+test-recipe-bng: check-tools ## Run BNG recipe integration checks (cluster required; NOK_RECIPE_VERIFY_LEVEL=install|full)
+	@echo "--> TEST: Running BNG recipe verification (level=$(NOK_RECIPE_VERIFY_LEVEL))"
+	@$(MAKE) verify-recipe-bng NOK_RECIPE_VERIFY_LEVEL=$(NOK_RECIPE_VERIFY_LEVEL)
+	@echo ""
+	@echo "--> TEST: BNG recipe checks completed successfully."
+
+test-recipe-dia: check-tools ## Run DIA recipe integration checks (cluster required; NOK_RECIPE_VERIFY_LEVEL=install|full)
+	@echo "--> TEST: Running DIA recipe verification (level=$(NOK_RECIPE_VERIFY_LEVEL))"
+	@$(MAKE) verify-recipe-dia NOK_RECIPE_VERIFY_LEVEL=$(NOK_RECIPE_VERIFY_LEVEL)
+	@echo ""
+	@echo "--> TEST: DIA recipe checks completed successfully."
+
+test-recipes: test-recipe-bng test-recipe-dia ## Run install-level checks for BNG and DIA recipes
+
+KPT_VALIDATE_DIR ?= $(dir $(NOK_KPT_DIR))
+test-kpt: ## Run kpt recipe package validation (Epic 9; sibling kpt repo or NOK_KPT_DIR)
+	@if [ -x "$(KPT_VALIDATE_DIR)/test/validate-recipes.sh" ]; then \
+		echo "--> TEST: Running kpt recipe validation in $(KPT_VALIDATE_DIR)"; \
+		YQ="$(YQ)" "$(KPT_VALIDATE_DIR)/test/validate-recipes.sh"; \
+	elif [ -x "$(BASE)/../kpt/test/validate-recipes.sh" ]; then \
+		echo "--> TEST: Running kpt recipe validation in $(BASE)/../kpt"; \
+		YQ="$(YQ)" "$(BASE)/../kpt/test/validate-recipes.sh"; \
+	else \
+		echo "[WARN] kpt validate-recipes.sh not found — skip (set KPT_VALIDATE_DIR)"; \
+	fi
+
+test-epic9: test test-kpt ## Epic 9 gate: NetOpsKube unit tests + kpt package validation (no cluster)

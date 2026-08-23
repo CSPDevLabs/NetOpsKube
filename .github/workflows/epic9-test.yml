@@ -1,0 +1,54 @@
+name: NetOpsKube tests (Epic 9)
+
+on:
+  push:
+    branches: [main, feat/*]
+  pull_request:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install bats
+        run: sudo apt-get update && sudo apt-get install -y bats
+
+      - name: Run unit tests and coverage gate
+        run: make test
+
+  kpt-recipes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: CSPDevLabs/kpt
+          path: kpt
+
+      - name: Install yq
+        run: |
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Validate BNG and DIA kpt packages
+        working-directory: kpt
+        run: make test
+
+  nok-controller:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: CSPDevLabs/nok-controller
+          path: nok-controller
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run controller unit tests
+        working-directory: nok-controller
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-flask pytest-mock
+          pytest -q
