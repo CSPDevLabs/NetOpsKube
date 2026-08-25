@@ -25,7 +25,7 @@ DIA_GRAFANA_REPO_URL := ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_D
 
 ## Deploy DIA and GitOps
 .PHONY: try-nok-dia
-try-nok-dia: install-dia-pkg install-git-pkg gitops-init gitops-dia-kustomization portal-enable-dia annotate-auth-ingress-dia
+try-nok-dia: install-dia-pkg install-git-pkg gitops-init gitops-dia-kustomization portal-enable-dia annotate-auth-ingress-dia annotate-auth-ingress-gitea
 
 .PHONY: gitops-dia-kustomization
 gitops-dia-kustomization: gitea-create-dia-repo gitea-create-dia-grafana-repo flux-create-dia-secret flux-create-dia-source push-dia-manifests push-dia-grafana create-dia-kustomizations

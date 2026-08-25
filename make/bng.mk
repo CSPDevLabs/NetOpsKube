@@ -22,7 +22,7 @@ BNG_REPO_URL := ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_BNG_REPO)
 
 ## Deploy BNG and GitOps
 .PHONY: try-nok-bng
-try-nok-bng: install-bng-pkg install-git-pkg gitops-init gitops-bng-kustomization portal-enable-bng annotate-auth-ingress-bng
+try-nok-bng: install-bng-pkg install-git-pkg gitops-init gitops-bng-kustomization portal-enable-bng annotate-auth-ingress-bng annotate-auth-ingress-gitea
 
 .PHONY: gitops-bng-kustomization
 gitops-bng-kustomization: gitea-create-bng-repo flux-create-bng-secret flux-create-bng-source push-bng-manifests create-bng-kustomizations

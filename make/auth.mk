@@ -109,27 +109,6 @@ annotate-auth-ingress-base:
 		echo "--> AUTH: Keycloak disabled. Skipping BASE ingress annotation."; \
 	fi
 
-.PHONY: annotate-portal-health-ingress
-annotate-portal-health-ingress:
-	@if [ "$(KEYCLOAK_ENABLED)" = "YES" ]; then \
-		if $(KUBECTL) get ingress portal-health-ingress -n nok-base >/dev/null 2>&1; then \
-			echo "--> AUTH: Updating nok-base/portal-health-ingress for OAuth probing"; \
-			$(KUBECTL) annotate ingress portal-health-ingress \
-				-n nok-base \
-				netopskube.io/bbm-oauth="true" \
-				--overwrite; \
-			$(KUBECTL) annotate ingress portal-health-ingress \
-				-n nok-base \
-				netopskube.io/bbm- \
-				--overwrite; \
-		else \
-			echo "--> AUTH: Ingress nok-base/portal-health-ingress not found. Skipping."; \
-		fi; \
-	else \
-		echo "--> AUTH: Keycloak disabled. Skipping portal-health-ingress annotation."; \
-	fi
-
-
 .PHONY: annotate-auth-ingress-dia
 annotate-auth-ingress-dia:
 	@if [ "$(KEYCLOAK_ENABLED)" = "YES" ]; then \
@@ -178,15 +157,23 @@ annotate-auth-ingress-bbm:
 annotate-auth-ingress-gitea:
 	@if [ "$(KEYCLOAK_ENABLED)" = "YES" ]; then \
 		if $(KUBECTL) get ingress nok-gitea-ingress -n nok-git >/dev/null 2>&1; then \
-			echo "--> AUTH: Updating nok-git/nok-gitea-ingress for OAuth probing"; \
-			$(KUBECTL) annotate ingress nok-gitea-ingress \
+			echo "--> AUTH: Checking nok-git/nok-gitea-ingress OAuth annotation"; \
+			OAUTH_ENABLED=$$($(KUBECTL) get ingress nok-gitea-ingress \
 				-n nok-git \
-				netopskube.io/bbm-oauth="true" \
-				--overwrite; \
-			$(KUBECTL) annotate ingress nok-gitea-ingress \
-				-n nok-git \
-				netopskube.io/bbm- \
-				--overwrite; \
+				-o jsonpath='{.metadata.annotations.netopskube\.io/bbm-oauth}'); \
+			if [ "$$OAUTH_ENABLED" = "true" ]; then \
+				echo "--> AUTH: netopskube.io/bbm-oauth=true already exists. Skipping annotation."; \
+			else \
+				echo "--> AUTH: Updating nok-git/nok-gitea-ingress for OAuth probing"; \
+				$(KUBECTL) annotate ingress nok-gitea-ingress \
+					-n nok-git \
+					netopskube.io/bbm-oauth="true" \
+					--overwrite; \
+				$(KUBECTL) annotate ingress nok-gitea-ingress \
+					-n nok-git \
+					netopskube.io/bbm- \
+					--overwrite; \
+			fi; \
 		else \
 			echo "--> AUTH: Ingress nok-git/nok-gitea-ingress not found. Skipping."; \
 		fi; \
@@ -199,7 +186,7 @@ annotate-auth-ingress-gitea:
 
 ifeq ($(KEYCLOAK_ENABLED),YES)
 
-configure-auth: clone-keycloak-repo deploy-auth portal-enable-keycloak annotate-auth-ingress-base annotate-portal-health-ingress annotate-auth-ingress-bbm annotate-auth-ingress-gitea
+configure-auth: clone-keycloak-repo deploy-auth portal-enable-keycloak annotate-auth-ingress-base annotate-auth-ingress-bbm
 
 else
 
