@@ -68,11 +68,16 @@ portal-enable-keycloak:
 annotate-auth-ingress-bng:
 	@if [ "$(KEYCLOAK_ENABLED)" = "YES" ]; then \
 		if $(KUBECTL) get ingress nok-apps-ingress -n nok-bng >/dev/null 2>&1; then \
-			echo "--> AUTH: Annotating nok-bng/nok-apps-ingress"; \
+			echo "--> AUTH: Updating nok-bng/nok-apps-ingress for OAuth probing"; \
 			$(KUBECTL) annotate ingress nok-apps-ingress \
 				-n nok-bng \
+				netopskube.io/bbm-oauth="true" \
 				nginx.ingress.kubernetes.io/auth-url="http://oauth2-proxy.nok-base.svc.cluster.local/oauth2/auth" \
 				nginx.ingress.kubernetes.io/auth-signin="http://bng.nok.local:8080/oauth2/start?rd=\$$escaped_request_uri" \
+				--overwrite; \
+			$(KUBECTL) annotate ingress nok-apps-ingress \
+				-n nok-bng \
+				netopskube.io/bbm- \
 				--overwrite; \
 		else \
 			echo "--> AUTH: Ingress nok-bng/nok-apps-ingress not found. Skipping."; \
@@ -84,15 +89,44 @@ annotate-auth-ingress-bng:
 
 .PHONY: annotate-auth-ingress-base
 annotate-auth-ingress-base:
-	@if $(KUBECTL) get ingress nok-apps-portal-ingress -n nok-base >/dev/null 2>&1; then \
-		echo "--> AUTH: Annotating nok-base/nok-apps-portal-ingress"; \
-		$(KUBECTL) annotate ingress nok-apps-portal-ingress \
-			-n nok-base \
-			nginx.ingress.kubernetes.io/auth-url="http://oauth2-proxy.nok-base.svc.cluster.local/oauth2/auth" \
-			nginx.ingress.kubernetes.io/auth-signin="http://bng.nok.local:8080/oauth2/start?rd=\$$escaped_request_uri" \
-			--overwrite; \
+	@if [ "$(KEYCLOAK_ENABLED)" = "YES" ]; then \
+		if $(KUBECTL) get ingress nok-apps-portal-ingress -n nok-base >/dev/null 2>&1; then \
+			echo "--> AUTH: Updating nok-base/nok-apps-portal-ingress for OAuth probing"; \
+			$(KUBECTL) annotate ingress nok-apps-portal-ingress \
+				-n nok-base \
+				netopskube.io/bbm-oauth="true" \
+				nginx.ingress.kubernetes.io/auth-url="http://oauth2-proxy.nok-base.svc.cluster.local/oauth2/auth" \
+				nginx.ingress.kubernetes.io/auth-signin="http://bng.nok.local:8080/oauth2/start?rd=\$$escaped_request_uri" \
+				--overwrite; \
+			$(KUBECTL) annotate ingress nok-apps-portal-ingress \
+				-n nok-base \
+				netopskube.io/bbm- \
+				--overwrite; \
+		else \
+			echo "--> AUTH: Ingress nok-base/nok-apps-portal-ingress not found. Skipping."; \
+		fi; \
 	else \
-		echo "--> AUTH: Ingress nok-base/nok-apps-portal-ingress not found. Skipping."; \
+		echo "--> AUTH: Keycloak disabled. Skipping BASE ingress annotation."; \
+	fi
+
+.PHONY: annotate-portal-health-ingress
+annotate-portal-health-ingress:
+	@if [ "$(KEYCLOAK_ENABLED)" = "YES" ]; then \
+		if $(KUBECTL) get ingress portal-health-ingress -n nok-base >/dev/null 2>&1; then \
+			echo "--> AUTH: Updating nok-base/portal-health-ingress for OAuth probing"; \
+			$(KUBECTL) annotate ingress portal-health-ingress \
+				-n nok-base \
+				netopskube.io/bbm-oauth="true" \
+				--overwrite; \
+			$(KUBECTL) annotate ingress portal-health-ingress \
+				-n nok-base \
+				netopskube.io/bbm- \
+				--overwrite; \
+		else \
+			echo "--> AUTH: Ingress nok-base/portal-health-ingress not found. Skipping."; \
+		fi; \
+	else \
+		echo "--> AUTH: Keycloak disabled. Skipping portal-health-ingress annotation."; \
 	fi
 
 
@@ -100,11 +134,16 @@ annotate-auth-ingress-base:
 annotate-auth-ingress-dia:
 	@if [ "$(KEYCLOAK_ENABLED)" = "YES" ]; then \
 		if $(KUBECTL) get ingress nok-apps-ingress -n nok-dia >/dev/null 2>&1; then \
-			echo "--> AUTH: Annotating nok-dia/nok-apps-ingress"; \
+			echo "--> AUTH: Updating nok-dia/nok-apps-ingress for OAuth probing"; \
 			$(KUBECTL) annotate ingress nok-apps-ingress \
 				-n nok-dia \
+				netopskube.io/bbm-oauth="true" \
 				nginx.ingress.kubernetes.io/auth-url="http://oauth2-proxy.nok-base.svc.cluster.local/oauth2/auth" \
 				nginx.ingress.kubernetes.io/auth-signin="http://bng.nok.local:8080/oauth2/start?rd=\$$escaped_request_uri" \
+				--overwrite; \
+			$(KUBECTL) annotate ingress nok-apps-ingress \
+				-n nok-dia \
+				netopskube.io/bbm- \
 				--overwrite; \
 		else \
 			echo "--> AUTH: Ingress nok-dia/nok-apps-ingress not found. Skipping."; \
@@ -113,13 +152,54 @@ annotate-auth-ingress-dia:
 		echo "--> AUTH: Keycloak disabled. Skipping DIA ingress annotation."; \
 	fi
 
+.PHONY: annotate-auth-ingress-bbm
+annotate-auth-ingress-bbm:
+	@if [ "$(KEYCLOAK_ENABLED)" = "YES" ]; then \
+		if $(KUBECTL) get ingress bbm-ingress -n nok-bbm >/dev/null 2>&1; then \
+			echo "--> AUTH: Updating nok-bbm/bbm-ingress for OAuth probing"; \
+			$(KUBECTL) annotate ingress bbm-ingress \
+				-n nok-bbm \
+				netopskube.io/bbm-oauth="true" \
+				nginx.ingress.kubernetes.io/auth-url="http://oauth2-proxy.nok-base.svc.cluster.local/oauth2/auth" \
+				nginx.ingress.kubernetes.io/auth-signin="http://bng.nok.local:8080/oauth2/start?rd=\$$escaped_request_uri" \
+				--overwrite; \
+			$(KUBECTL) annotate ingress bbm-ingress \
+				-n nok-bbm \
+				netopskube.io/bbm- \
+				--overwrite; \
+		else \
+			echo "--> AUTH: Ingress nok-bbm/bbm-ingress not found. Skipping."; \
+		fi; \
+	else \
+		echo "--> AUTH: Keycloak disabled. Skipping BBM ingress annotation."; \
+	fi
+
+.PHONY: annotate-auth-ingress-gitea
+annotate-auth-ingress-gitea:
+	@if [ "$(KEYCLOAK_ENABLED)" = "YES" ]; then \
+		if $(KUBECTL) get ingress nok-gitea-ingress -n nok-git >/dev/null 2>&1; then \
+			echo "--> AUTH: Updating nok-git/nok-gitea-ingress for OAuth probing"; \
+			$(KUBECTL) annotate ingress nok-gitea-ingress \
+				-n nok-git \
+				netopskube.io/bbm-oauth="true" \
+				--overwrite; \
+			$(KUBECTL) annotate ingress nok-gitea-ingress \
+				-n nok-git \
+				netopskube.io/bbm- \
+				--overwrite; \
+		else \
+			echo "--> AUTH: Ingress nok-git/nok-gitea-ingress not found. Skipping."; \
+		fi; \
+	else \
+		echo "--> AUTH: Keycloak disabled. Skipping Gitea ingress annotation."; \
+	fi
 
 
 .PHONY: configure-auth
 
 ifeq ($(KEYCLOAK_ENABLED),YES)
 
-configure-auth: clone-keycloak-repo deploy-auth portal-enable-keycloak annotate-auth-ingress-base
+configure-auth: clone-keycloak-repo deploy-auth portal-enable-keycloak annotate-auth-ingress-base annotate-portal-health-ingress annotate-auth-ingress-bbm annotate-auth-ingress-gitea
 
 else
 
