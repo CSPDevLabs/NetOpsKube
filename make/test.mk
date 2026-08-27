@@ -18,7 +18,7 @@ test-unit: check-tools ## Run BATS unit tests (no cluster required)
 		exit 1; \
 	}
 	@echo "--> TEST: Running BATS unit tests"
-	@$(BATS) --pretty $(TEST_DIR)/bats/unit/
+	@TERM=$${TERM:-dumb} $(BATS) $(TEST_DIR)/bats/unit/
 	@echo ""
 	@echo "--> TEST: Unit tests completed successfully."
 
@@ -32,7 +32,7 @@ test-integration: check-tools ## Run BATS integration tests (cluster required)
 		exit 1; \
 	}
 	@echo "--> TEST: Running BATS integration tests"
-	@$(BATS) --pretty $(TEST_DIR)/bats/integration/
+	@TERM=$${TERM:-dumb} $(BATS) $(TEST_DIR)/bats/integration/
 	@echo ""
 	@echo "--> TEST: Integration tests completed successfully."
 

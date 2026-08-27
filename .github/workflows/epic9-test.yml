@@ -5,6 +5,9 @@ on:
     branches: [main, feat/*]
   pull_request:
 
+env:
+  TERM: dumb
+
 jobs:
   unit:
     runs-on: ubuntu-latest
@@ -23,6 +26,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: CSPDevLabs/kpt
+          ref: feat/portal-embedding
           path: kpt
 
       - name: Install yq
@@ -32,7 +36,13 @@ jobs:
 
       - name: Validate BNG and DIA kpt packages
         working-directory: kpt
-        run: make test
+        run: |
+          if [ -f Makefile ] && grep -q '^test:' Makefile; then
+            make test
+          else
+            chmod +x test/validate-recipes.sh
+            YQ="$(command -v yq)" ./test/validate-recipes.sh
+          fi
 
   nok-controller:
     runs-on: ubuntu-latest
