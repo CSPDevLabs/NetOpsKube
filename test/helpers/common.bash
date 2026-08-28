@@ -18,11 +18,27 @@ kpt_root_for_tests() {
   fi
 }
 
-# Copy fixture nok-kpt tree into an isolated temp directory for each test.
+# Copy kpt packages from the sibling kpt repo into an isolated temp tree per test.
 setup_nok_kpt_fixture() {
+  local kpt_root
+  kpt_root="$(kpt_root_for_tests)" || return 1
+
   FIXTURE_NOK_KPT="${BATS_TEST_TMPDIR}/nok-kpt"
   rm -rf "$FIXTURE_NOK_KPT"
-  cp -a "${NETOPSKUBE_ROOT}/test/fixtures/nok-kpt/." "$FIXTURE_NOK_KPT"
+  mkdir -p "$FIXTURE_NOK_KPT"
+
+  local pkg
+  for pkg in nok-base nok-bng nok-dia nok-git nok-lb nok-bbm; do
+    if [[ -d "${kpt_root}/${pkg}" ]]; then
+      cp -a "${kpt_root}/${pkg}" "$FIXTURE_NOK_KPT/"
+    fi
+  done
+
+  if [[ ! -f "$FIXTURE_NOK_KPT/nok-base/apply-setters.yaml" ]]; then
+    echo "Error: kpt packages missing under ${kpt_root}" >&2
+    return 1
+  fi
+
   export FIXTURE_NOK_KPT
 }
 

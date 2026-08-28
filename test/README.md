@@ -12,7 +12,15 @@ sudo apt install bats
 brew install bats-core
 ```
 
-Ensure `yq` is available (downloaded automatically by `make check-tools`).
+Ensure `yq` is available (downloaded automatically by `make test-unit`).
+
+**kpt repo:** Unit tests copy packages from the [CSPDevLabs/kpt](https://github.com/CSPDevLabs/kpt) checkout — not from NetOpsKube. Clone it as a sibling or set `KPT_ROOT`:
+
+```bash
+git clone -b feat/portal-embedding https://github.com/CSPDevLabs/kpt ../kpt
+# or: export KPT_ROOT=/path/to/kpt
+make test
+```
 
 ## Run
 
@@ -97,10 +105,8 @@ test/
     unit-scope.txt    # canonical list of unit-testable behaviors
   scripts/
     verify-coverage.sh
-  fixtures/
-    nok-kpt/          # minimal apply-setters + Gitea manifests
   helpers/
-    common.bash
+    common.bash       # copies kpt packages into a temp dir per test
 make/
   recipe-verify.mk    # Epic 9 per-recipe health + metrics checks
 ```
@@ -110,4 +116,4 @@ make/
 1. Add a `*.bats` file under `test/bats/unit/` for logic that does not need a cluster.
 2. Add a matching line to `test/coverage/unit-scope.txt` (required for `make test` to pass).
 3. Use `KIND_NET_PREFIX=172.30.0` on the `make` command line to avoid Docker/KinD detection.
-4. Point `NOK_KPT_DIR` at a fixture copy via `setup_nok_kpt_fixture` in `helpers/common.bash`.
+4. Ensure a kpt checkout exists (`../kpt`, `./kpt`, or `KPT_ROOT`); `setup_nok_kpt_fixture` copies packages into a temp dir.
