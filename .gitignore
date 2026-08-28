@@ -13,8 +13,8 @@ tools/
 build/
 *.log
 catalog/
-nok-kpt/
-nok-clabs/
+/nok-kpt/
+/nok-clabs/
 nok-bng-resources/
 .env
 .envrc

@@ -33,7 +33,8 @@ KIND_LAUNCH_CONFIG ?= /tmp/kind-config-$(KIND_CLUSTER_NAME).yaml
 # KinD Docker network prefix (e.g. 172.18.0). LB IPs are written into nok-kpt
 # apply-setters.yaml before package install (CSPDevLabs/kpt#27).
 KIND_LB_DEFAULT_PREFIX ?= 172.18.0
-KIND_NET_PREFIX = $(shell docker inspect \
+# Override on the CLI for tests: make update-kpt-lb-setters KIND_NET_PREFIX=172.30.0
+KIND_NET_PREFIX ?= $(shell docker inspect \
 	-f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' \
 	$(KIND_CLUSTER_NAME)-control-plane 2>/dev/null | \
 	awk -F. '{print $$1 "." $$2 "." $$3}')
@@ -73,6 +74,8 @@ FLUX ?= $(TOOLS)/flux
 # Troubleshooting / day-2 ops targets live in their own file to keep this
 # Makefile focused on install + deploy. See docs/TROUBLESHOOTING.md.
 include make/troubleshoot.mk
+include make/recipe-verify.mk
+include make/test.mk
 
 
 # --- Proxy Settings ---
@@ -183,6 +186,8 @@ BNG_REPO_URL = ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_BNG_REPO).
 FLUX_DIA_REPO ?= nok-dia-resources
 FLUX_DIA_GRAFANA_REPO ?= grafana-dashboards
 FLUX_DIA_SECRET ?= nok-dia-auth
+# Prefix DIA Flux Kustomizations to avoid name collisions with BNG (Epic 9).
+FLUX_DIA_KUST_PREFIX ?= dia-
 DIA_MANIFESTS_DIR := ./nok-clabs/nok-dia/nok-manifests
 DIA_GRAFANA_DIR := ./nok-clabs/nok-dia/grafana-dashboards
 DIA_REPO_URL = ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_DIA_REPO).git
@@ -277,7 +282,7 @@ gitops-bng-kustomization: gitea-create-bng-repo flux-create-bng-secret flux-crea
 	@echo "--> GITOPS: BNG repo in sync by Flux"
 
 .PHONY: gitops-dia-kustomization
-gitops-dia-kustomization: gitea-create-dia-repo gitea-create-dia-grafana-repo flux-create-dia-secret flux-create-dia-source push-dia-manifests push-dia-manifests push-dia-grafana create-dia-kustomizations
+gitops-dia-kustomization: gitea-create-dia-repo gitea-create-dia-grafana-repo flux-create-dia-secret flux-create-dia-source push-dia-manifests push-dia-grafana create-dia-kustomizations
 	@echo "--> GITOPS: DIA repo in sync by Flux"
 
 .PHONY: apply-kpt-overlays
@@ -889,7 +894,7 @@ flux-create-dia-source:
 	fi	
 
 .PHONY: push-bng-manifests
-push-bng-manifests:
+push-bng-manifests: verify-before-publish-bng
 	@echo "--> GIT: Forcing full snapshot push of BNG manifests to $(FLUX_BNG_REPO)"
 
 	@cd $(BNG_MANIFESTS_DIR) && \
@@ -907,7 +912,7 @@ push-bng-manifests:
 
 
 .PHONY: push-dia-manifests
-push-dia-manifests:
+push-dia-manifests: verify-before-publish-dia
 	@echo "--> GIT: Forcing full snapshot push of DIA manifests to $(FLUX_DIA_REPO)"
 
 	@cd $(DIA_MANIFESTS_DIR) && \
@@ -967,14 +972,15 @@ create-bng-kustomizations:
 
 .PHONY: create-dia-kustomizations
 create-dia-kustomizations:
-	@echo "--> FLUX: Ensuring Kustomizations for DIA manifests exist"
+	@echo "--> FLUX: Ensuring Kustomizations for DIA manifests exist (prefix: $(FLUX_DIA_KUST_PREFIX))"
 	@for d in $(DIA_MANIFESTS_DIR)/*/; do \
 		n=$$(basename "$$d"); \
+		kname="$(FLUX_DIA_KUST_PREFIX)$$n"; \
 		if [ "$$n" != ".git" ]; then \
-			echo "Checking Kustomization for $$n..."; \
-			if $(FLUX) get kustomization "$$n" -n flux-system 2>&1 | grep -q "not found"; then \
-				echo "Creating Kustomization for $$n..."; \
-				$(FLUX) create kustomization "$$n" \
+			echo "Checking Kustomization for $$kname..."; \
+			if $(FLUX) get kustomization "$$kname" -n flux-system 2>&1 | grep -q "not found"; then \
+				echo "Creating Kustomization $$kname..."; \
+				$(FLUX) create kustomization "$$kname" \
 				  --source=GitRepository/$(FLUX_DIA_REPO) \
 				  --path="./$$n" \
 				  --prune=true \
@@ -982,10 +988,10 @@ create-dia-kustomizations:
 				  --timeout=1m \
 				  --namespace=flux-system; \
 			else \
-				echo "Kustomization for $$n already exists."; \
+				echo "Kustomization $$kname already exists."; \
 			fi \
 		fi \
-	done	
+	done
 
 
 .PHONY: configure-auth

@@ -1,0 +1,51 @@
+# Unit-test scope for NetOpsKube Makefile logic (no KinD cluster required).
+# Each line must match a @test name in test/bats/unit/*.bats (verified by verify-coverage.sh).
+
+update-kpt-lb-setters writes LB IPs for a non-default KinD prefix
+update-kpt-lb-setters overwrites an existing prefix idempotently
+update-kpt-lb-setters writes default template prefix 172.18.0
+update-kpt-lb-setters fails when KinD prefix is empty
+update-kpt-lb-setters fails when nok-kpt directory is missing
+
+show-kind-lb-setters prints detected prefix and apply-setters values
+show-kind-lb-setters fails when KinD prefix is empty
+
+apply-kpt-overlays patches Gitea for portal sub-path access
+apply-kpt-overlays removes standalone Gitea ingress manifest
+apply-kpt-overlays copies NetOpsKube overlay manifests into nok-kpt
+apply-kpt-overlays is idempotent for Gitea sub-path settings
+apply-kpt-overlays skips when overlays directory is missing
+apply-kpt-overlays fails when nok-kpt directory is missing
+
+GITEA_IP derives from KinD prefix and ingress host octet
+GITEA_SSH_HOST derives from KinD prefix and Gitea SSH host octet
+KinD LB host octets use expected defaults
+Gitea and GitOps Makefile defaults are set
+
+kind cluster config keeps expected pod and service subnets
+kind cluster config uses dual stack networking
+generated kind cluster config includes ingress-ready node labels
+
+git-clone-kpt skips clone when nok-kpt already exists
+git-clone-clab skips clone when nok-clabs already exists
+
+check-clab-prerequisites passes when image and license exist
+check-clab-prerequisites fails when license file is missing
+
+kpt recipe portal menu opens apps in-portal (not new tab)
+kpt recipe defines gitea-proxy ExternalName service
+
+help-troubleshoot lists troubleshooting targets
+os-shell outputs platform JSON
+proxy-env outputs proxy JSON
+
+make help exits successfully
+make test target is documented in help
+
+verify-gnmic-subscriptions warns when no targets exist
+
+recipe-verify targets are listed in help-recipe-verify
+verify-recipe fails for unknown recipe name
+NOK_VERIFY_BEFORE_PUBLISH defaults to yes
+NOK_RECIPE_VERIFY_LEVEL defaults to install
+FLUX_DIA_KUST_PREFIX defaults to dia-
