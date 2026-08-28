@@ -6,7 +6,8 @@ load '../../helpers/common.bash'
 # Mae's redesign: Gitea proxy, menu config, and ingress live under kpt/nok-bng and kpt/nok-dia.
 
 @test "kpt recipe portal menu opens apps in-portal (not new tab)" {
-  local kpt_root="${NETOPSKUBE_ROOT}/../kpt"
+  local kpt_root
+  kpt_root="$(kpt_root_for_tests)"
   for recipe in nok-bng nok-dia; do
     local menu="${kpt_root}/${recipe}/portal/portal-menu-config.yaml"
     [ -f "$menu" ]
@@ -17,7 +18,8 @@ load '../../helpers/common.bash'
 }
 
 @test "kpt recipe defines gitea-proxy ExternalName service" {
-  local kpt_root="${NETOPSKUBE_ROOT}/../kpt"
+  local kpt_root
+  kpt_root="$(kpt_root_for_tests)"
   for recipe in nok-bng nok-dia; do
     local svc="${kpt_root}/${recipe}/portal/portal-gitea-proxy-svc.yaml"
     [ -f "$svc" ]

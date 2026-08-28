@@ -4,6 +4,20 @@
 NETOPSKUBE_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/../../.." && pwd)"
 export NETOPSKUBE_ROOT
 
+# kpt checkout for recipe package assertions (local ../kpt, CI kpt/, or KPT_ROOT).
+kpt_root_for_tests() {
+  if [[ -n "${KPT_ROOT:-}" && -d "$KPT_ROOT" ]]; then
+    echo "$KPT_ROOT"
+  elif [[ -d "${NETOPSKUBE_ROOT}/kpt" ]]; then
+    echo "${NETOPSKUBE_ROOT}/kpt"
+  elif [[ -d "${NETOPSKUBE_ROOT}/../kpt" ]]; then
+    echo "${NETOPSKUBE_ROOT}/../kpt"
+  else
+    echo "Error: kpt checkout not found (clone kpt or set KPT_ROOT)" >&2
+    return 1
+  fi
+}
+
 # Copy fixture nok-kpt tree into an isolated temp directory for each test.
 setup_nok_kpt_fixture() {
   FIXTURE_NOK_KPT="${BATS_TEST_TMPDIR}/nok-kpt"

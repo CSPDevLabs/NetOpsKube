@@ -14,10 +14,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/checkout@v4
+        with:
+          repository: CSPDevLabs/kpt
+          ref: feat/portal-embedding
+          path: kpt
+
       - name: Install bats
         run: sudo apt-get update && sudo apt-get install -y bats
 
       - name: Run unit tests and coverage gate
+        env:
+          KPT_ROOT: ${{ github.workspace }}/kpt
         run: make test
 
   kpt-recipes:

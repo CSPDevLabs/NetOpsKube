@@ -12,7 +12,7 @@ TEST_DIR ?= $(BASE)/test
 .PHONY: test test-unit test-integration test-smoke test-coverage test-recipe-bng test-recipe-dia test-recipes test-kpt test-epic9
 test: test-unit test-coverage ## Run default test suite and verify 100% unit scope coverage
 
-test-unit: check-tools ## Run BATS unit tests (no cluster required)
+test-unit: $(YQ) ## Run BATS unit tests (no cluster required)
 	@command -v $(BATS) >/dev/null 2>&1 || { \
 		echo "Error: 'bats' not found. Install with: sudo apt install bats"; \
 		exit 1; \
