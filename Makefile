@@ -54,6 +54,9 @@ KIND_LB_POOL_END ?= 120
 NO_HOST_PORT_MAPPINGS ?= no
 EXT_HTTPS_PORT ?= 5443 # Port to map for external HTTPS access if NO_HOST_PORT_MAPPINGS is 'no'
 
+# Optional: Set to 'YES' to deploy SDCIO platform + recipe exporters (default YES)
+SDCIO_ENABLED ?= YES
+
 # Optional: Set to 'YES' to onboard Keycloak, otherwise 'NO'
 KEYCLOAK_ENABLED ?= NO
 
@@ -93,8 +96,11 @@ export NO_PROXY := 127.0.0.1,localhost,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/
 PROXY_DEPLOYMENTS := \
 nok-bbm:coredns-updater \
 nok-bbm:blackbox-exporter \
-nok-base:grafana-operator-controller-manager \
-nok-base:config-server
+nok-base:grafana-operator-controller-manager
+
+ifneq ($(filter YES yes Yes,$(SDCIO_ENABLED)),)
+PROXY_DEPLOYMENTS += nok-base:config-server
+endif
 
 ifneq ($(filter YES yes Yes,$(KEYCLOAK_ENABLED)),)
 PROXY_DEPLOYMENTS += \
@@ -186,6 +192,9 @@ FLUX_DIA_SECRET ?= nok-dia-auth
 DIA_MANIFESTS_DIR := ./nok-clabs/nok-dia/nok-manifests
 DIA_GRAFANA_DIR := ./nok-clabs/nok-dia/grafana-dashboards
 DIA_REPO_URL = ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_DIA_REPO).git
+
+include make/deploy-tuning.mk
+
 DIA_GRAFANA_REPO_URL = ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_DIA_GRAFANA_REPO).git
 
 define GET_GITEA_POD
@@ -273,11 +282,11 @@ gitops-init: gitea-create-admin gitea-create-flux-repo gitea-add-ssh-key  flux-b
 	@echo "--> GITOPS: Cluster is now managed by Flux"
 
 .PHONY: gitops-bng-kustomization
-gitops-bng-kustomization: gitea-create-bng-repo flux-create-bng-secret flux-create-bng-source push-bng-manifests create-bng-kustomizations
+gitops-bng-kustomization: gitea-create-bng-repo gitea-create-grafana-dashboards-repo flux-create-bng-secret flux-create-bng-source push-bng-manifests push-grafana-dashboards create-bng-kustomizations
 	@echo "--> GITOPS: BNG repo in sync by Flux"
 
 .PHONY: gitops-dia-kustomization
-gitops-dia-kustomization: gitea-create-dia-repo gitea-create-dia-grafana-repo flux-create-dia-secret flux-create-dia-source push-dia-manifests push-dia-manifests push-dia-grafana create-dia-kustomizations
+gitops-dia-kustomization: gitea-create-dia-repo gitea-create-grafana-dashboards-repo flux-create-dia-secret flux-create-dia-source push-dia-manifests push-grafana-dashboards create-dia-kustomizations
 	@echo "--> GITOPS: DIA repo in sync by Flux"
 
 .PHONY: apply-kpt-overlays
@@ -597,11 +606,11 @@ start-ingress-port-forward: ## Starts background port-forward for ingress-nginx-
 	@echo "    To stop it, find the process using 'ps aux | grep \"kubectl port-forward\"' and 'kill <PID>'."
 
 .PHONY: install-base-pkg
-install-base-pkg: update-kpt-lb-setters ## Installs the base kpt package from ./nok-kpt/nok-base
+install-base-pkg: update-kpt-lb-setters configure-sdcio-kpt ## Installs the base kpt package from ./nok-kpt/nok-base
 	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-base,nok-base,"--reconcile-timeout=5m", "--inventory-policy=adopt")	
 
 .PHONY: install-bbm-pkg
-install-bbm-pkg: ## Installs the BBM (self-monitotoring and observability) kpt package from ./nok-kpt/nok-bbm
+install-bbm-pkg: update-kpt-tuning-setters ## Installs the BBM (self-monitotoring and observability) kpt package from ./nok-kpt/nok-bbm
 	@echo "--> INSTALL: [\033[1;34mBBM\033[0m] - Applying kpt package with setters"
 	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-bbm,nok-bbm,"--reconcile-timeout=5m", "--inventory-policy=adopt")	
 
@@ -619,11 +628,11 @@ install-lb-pkg: check-tools git-clone-kpt install-base-pkg wait-for-metallb-read
 	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-lb,nok-lb,"--reconcile-timeout=5m", "")		
 
 .PHONY: install-bng-pkg
-install-bng-pkg: check-tools git-clone-kpt install-base-pkg install-lb-pkg ## Installs the base kpt package from ./nok-kpt/nok-bng
+install-bng-pkg: check-tools git-clone-kpt configure-sdcio-kpt install-base-pkg install-lb-pkg ## Installs the base kpt package from ./nok-kpt/nok-bng
 	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-bng,nok-bng,"--reconcile-timeout=5m", "--inventory-policy=adopt")		
 
 .PHONY: install-dia-pkg
-install-dia-pkg: check-tools git-clone-kpt install-base-pkg install-lb-pkg ## Installs the base kpt package from ./nok-kpt/nok-dia
+install-dia-pkg: check-tools git-clone-kpt configure-sdcio-kpt install-base-pkg install-lb-pkg ## Installs the base kpt package from ./nok-kpt/nok-dia
 	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-dia,nok-dia,"--reconcile-timeout=5m", "--inventory-policy=adopt")
 
 .PHONY: install-git-pkg
@@ -814,18 +823,7 @@ gitea-create-dia-repo:
 
 
 .PHONY: gitea-create-dia-grafana-repo
-gitea-create-dia-grafana-repo:
-	@echo "--> GITEA: Ensuring repo $(FLUX_DIA_GRAFANA_REPO) exists"
-	@$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) \
-	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
-	  http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/repos/$(GITEA_ADMIN_USER)/$(FLUX_DIA_GRAFANA_REPO) \
-	  >/dev/null || \
-	$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) \
-	  -X POST \
-	  -H "Content-Type: application/json" \
-	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
-	  -d '{"name":"$(FLUX_DIA_GRAFANA_REPO)", "description": "NetOpsKube DIA Grafana Dashboards","private":false,"auto_init":true}' \
-	  http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/user/repos
+gitea-create-dia-grafana-repo: gitea-create-grafana-dashboards-repo ## Deprecated alias
 
 
 .PHONY: flux-create-bng-secret
@@ -889,10 +887,10 @@ flux-create-dia-source:
 	fi	
 
 .PHONY: push-bng-manifests
-push-bng-manifests:
+push-bng-manifests: stage-bng-manifests
 	@echo "--> GIT: Forcing full snapshot push of BNG manifests to $(FLUX_BNG_REPO)"
 
-	@cd $(BNG_MANIFESTS_DIR) && \
+	@cd $(BASE)/build/bng-manifests-staging && \
 		( \
 			rm -rf .git && \
 			git init -b $(FLUX_GIT_BRANCH) && \
@@ -907,10 +905,10 @@ push-bng-manifests:
 
 
 .PHONY: push-dia-manifests
-push-dia-manifests:
+push-dia-manifests: stage-dia-manifests
 	@echo "--> GIT: Forcing full snapshot push of DIA manifests to $(FLUX_DIA_REPO)"
 
-	@cd $(DIA_MANIFESTS_DIR) && \
+	@cd $(BASE)/build/dia-manifests-staging && \
 		( \
 			rm -rf .git && \
 			git init -b $(FLUX_GIT_BRANCH) && \
@@ -925,67 +923,78 @@ push-dia-manifests:
 
 
 .PHONY: push-dia-grafana
-push-dia-grafana:
-	@echo "--> GIT: Forcing full snapshot push of DIA Grafana Dashboards to $(FLUX_DIA_GRAFANA_REPO)"
+push-dia-grafana: push-grafana-dashboards ## Deprecated: use push-grafana-dashboards
 
-	@cd $(DIA_GRAFANA_DIR) && \
-		( \
-			rm -rf .git && \
-			git init -b $(FLUX_GIT_BRANCH) && \
-			git remote add origin $(DIA_GRAFANA_REPO_URL) && \
-			git add -A && \
-			git commit --allow-empty -m "Authoritative snapshot of DIA manifests" && \
-			git config core.sshCommand 'ssh -o IdentitiesOnly=yes -i $(FLUX_SSH_KEY)' && \
-			git push --force origin $(FLUX_GIT_BRANCH) \
-		)
-
-	@echo "--> GIT: Full snapshot push completed"
 
 
 .PHONY: create-bng-kustomizations
 create-bng-kustomizations:
-	@echo "--> FLUX: Ensuring Kustomizations for BNG manifests exist"
+	@echo "--> FLUX: Ensuring Kustomizations for BNG manifests exist (SDCIO_ENABLED=$(SDCIO_ENABLED))"
 	@for d in $(BNG_MANIFESTS_DIR)/*/; do \
 		n=$$(basename "$$d"); \
-		if [ "$$n" != ".git" ]; then \
-			echo "Checking Kustomization for $$n..."; \
-			if $(FLUX) get kustomization "$$n" -n flux-system 2>&1 | grep -q "not found"; then \
-				echo "Creating Kustomization for $$n..."; \
-				$(FLUX) create kustomization "$$n" \
-				  --source=GitRepository/$(FLUX_BNG_REPO) \
-				  --path="./$$n" \
-				  --prune=true \
-				  --interval=1m \
-				  --timeout=1m \
-				  --namespace=flux-system; \
-			else \
-				echo "Kustomization for $$n already exists."; \
-			fi \
-		fi \
-	done	
+		if [ "$$n" = ".git" ]; then continue; fi; \
+		skip=0; \
+		if [ "$(SDCIO_ENABLED)" != "YES" ] && [ "$(SDCIO_ENABLED)" != "yes" ] && [ "$(SDCIO_ENABLED)" != "Yes" ]; then \
+			for s in $(SDCIO_FLUX_SKIP_DIRS); do \
+				if [ "$$n" = "$$s" ]; then skip=1; break; fi; \
+			done; \
+		fi; \
+		if [ "$$skip" = "1" ]; then \
+			echo "Skipping Kustomization $$n (SDCIO disabled)"; \
+			continue; \
+		fi; \
+		echo "Checking Kustomization for $$n..."; \
+		if $(FLUX) get kustomization "$$n" -n flux-system 2>&1 | grep -q "not found"; then \
+			echo "Creating Kustomization for $$n..."; \
+			$(FLUX) create kustomization "$$n" \
+			  --source=GitRepository/$(FLUX_BNG_REPO) \
+			  --path="./$$n" \
+			  --prune=true \
+			  --interval=1m \
+			  --timeout=1m \
+			  --namespace=flux-system; \
+		else \
+			echo "Kustomization for $$n already exists."; \
+		fi; \
+	done
+
+
+
 
 
 .PHONY: create-dia-kustomizations
 create-dia-kustomizations:
-	@echo "--> FLUX: Ensuring Kustomizations for DIA manifests exist"
+	@echo "--> FLUX: Ensuring Kustomizations for DIA manifests exist (SDCIO_ENABLED=$(SDCIO_ENABLED))"
 	@for d in $(DIA_MANIFESTS_DIR)/*/; do \
 		n=$$(basename "$$d"); \
-		if [ "$$n" != ".git" ]; then \
-			echo "Checking Kustomization for $$n..."; \
-			if $(FLUX) get kustomization "$$n" -n flux-system 2>&1 | grep -q "not found"; then \
-				echo "Creating Kustomization for $$n..."; \
-				$(FLUX) create kustomization "$$n" \
-				  --source=GitRepository/$(FLUX_DIA_REPO) \
-				  --path="./$$n" \
-				  --prune=true \
-				  --interval=1m \
-				  --timeout=1m \
-				  --namespace=flux-system; \
-			else \
-				echo "Kustomization for $$n already exists."; \
-			fi \
-		fi \
-	done	
+		if [ "$$n" = ".git" ]; then continue; fi; \
+		skip=0; \
+		if [ "$(SDCIO_ENABLED)" != "YES" ] && [ "$(SDCIO_ENABLED)" != "yes" ] && [ "$(SDCIO_ENABLED)" != "Yes" ]; then \
+			for s in $(SDCIO_FLUX_SKIP_DIRS); do \
+				if [ "$$n" = "$$s" ]; then skip=1; break; fi; \
+			done; \
+		fi; \
+		if [ "$$skip" = "1" ]; then \
+			echo "Skipping Kustomization $$n (SDCIO disabled)"; \
+			continue; \
+		fi; \
+		echo "Checking Kustomization for $$n..."; \
+		if $(FLUX) get kustomization "$$n" -n flux-system 2>&1 | grep -q "not found"; then \
+			echo "Creating Kustomization for $$n..."; \
+			$(FLUX) create kustomization "$$n" \
+			  --source=GitRepository/$(FLUX_DIA_REPO) \
+			  --path="./$$n" \
+			  --prune=true \
+			  --interval=1m \
+			  --timeout=1m \
+			  --namespace=flux-system; \
+		else \
+			echo "Kustomization for $$n already exists."; \
+		fi; \
+	done
+
+
+
 
 
 .PHONY: configure-auth
