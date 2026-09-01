@@ -128,6 +128,22 @@ Navigation: Users → Create User
 * Last Name
 
 
+### Deploy options (SDCIO, tuning, Grafana)
+
+Optional components and observability tuning are controlled via Makefile variables. See [docs/DEPLOY-OPTIONS.md](docs/DEPLOY-OPTIONS.md).
+
+```bash
+# Observability without SDCIO
+make SDCIO_ENABLED=NO try-nok-bng
+
+# Prometheus / gNMIc tuning
+make PROM_RETENTION=7d GNMIC_REPLICAS=2 try-nok-bng
+
+# Grafana dashboards from in-cluster Gitea (default)
+make GRAFANA_DASHBOARD_SOURCE=gitea gitops-bng-kustomization
+```
+
+
 ### Proxy Configuration
 In environments where outbound internet access is restricted, you may need to configure HTTP/HTTPS proxy settings for certain workloads.
  
