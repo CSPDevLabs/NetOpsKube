@@ -85,6 +85,9 @@ KIND_LB_POOL_END ?= 120
 NO_HOST_PORT_MAPPINGS ?= no
 EXT_HTTPS_PORT ?= 5443 # Port to map for external HTTPS access if NO_HOST_PORT_MAPPINGS is 'no'
 
+# Optional: Set to 'YES' to deploy SDCIO platform + recipe exporters (default YES)
+SDCIO_ENABLED ?= YES
+
 # --- Tool Paths (now managed by Makefile) ---
 TOOLS ?= $(BASE)/tools
 KIND ?= $(TOOLS)/kind

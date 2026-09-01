@@ -16,18 +16,15 @@
 ###############################################################################
 
 FLUX_DIA_REPO ?= nok-dia-resources
-FLUX_DIA_GRAFANA_REPO ?= grafana-dashboards
 FLUX_DIA_SECRET ?= nok-dia-auth
-DIA_MANIFESTS_DIR := ./nok-clabs/nok-dia/nok-manifests
-DIA_GRAFANA_DIR := ./nok-clabs/nok-dia/grafana-dashboards
+DIA_MANIFESTS_DIR := $(NOK_CLABS_DIR)/nok-dia/nok-manifests
 DIA_REPO_URL = ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_DIA_REPO).git
-DIA_GRAFANA_REPO_URL = ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_DIA_GRAFANA_REPO).git
 
 .PHONY: try-nok-dia
 try-nok-dia: install-dia-pkg gitops-dia-kustomization portal-enable-dia annotate-auth-ingress-dia annotate-auth-ingress-gitea  ## Deploy the DIA solution
 
 .PHONY: gitops-dia-kustomization
-gitops-dia-kustomization: gitea-create-dia-repo gitea-create-dia-grafana-repo flux-create-dia-secret flux-create-dia-source push-dia-manifests push-dia-grafana create-dia-kustomizations ## Synchronize DIA manifests with Flux
+gitops-dia-kustomization: gitea-create-dia-repo gitea-create-grafana-dashboards-repo flux-create-dia-secret flux-create-dia-source push-dia-manifests push-dia-grafana-dashboards create-dia-kustomizations ## Synchronize DIA manifests with Flux
 	@echo "--> GITOPS: DIA repo in sync by Flux"
 
 .PHONY: deploy-clab-dia
@@ -52,7 +49,7 @@ destroy-clab-dia: check-tools git-clone-clab ## Destroys the Containerlab DIA to
 	fi
 
 .PHONY: install-dia-pkg
-install-dia-pkg: check-tools git-clone-kpt ## Installs the DIA kpt package from ./nok-kpt/nok-dia
+install-dia-pkg: check-tools git-clone-kpt configure-sdcio-kpt ## Installs the DIA kpt package from ./nok-kpt/nok-dia
 	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-dia,nok-dia,"--reconcile-timeout=5m", "--inventory-policy=adopt")
 
 
@@ -68,20 +65,6 @@ gitea-create-dia-repo: ## Create the DIA GitOps repository in Gitea
 	  -H "Content-Type: application/json" \
 	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
 	  -d '{"name":"$(FLUX_DIA_REPO)", "description": "DIA resources for Network Observability and Conf Management","private":false,"auto_init":true}' \
-	  http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/user/repos
-
-.PHONY: gitea-create-dia-grafana-repo
-gitea-create-dia-grafana-repo: ## Create the DIA Grafana dashboard repository in Gitea
-	@echo "--> GITEA: Ensuring repo $(FLUX_DIA_GRAFANA_REPO) exists"
-	@$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) \
-	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
-	  http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/repos/$(GITEA_ADMIN_USER)/$(FLUX_DIA_GRAFANA_REPO) \
-	  >/dev/null || \
-	$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) \
-	  -X POST \
-	  -H "Content-Type: application/json" \
-	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
-	  -d '{"name":"$(FLUX_DIA_GRAFANA_REPO)", "description": "NetOpsKube DIA Grafana Dashboards","private":false,"auto_init":true}' \
 	  http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/user/repos
 	
 .PHONY: flux-create-dia-secret
@@ -114,10 +97,10 @@ flux-create-dia-source: ## Create the Flux GitRepository source for DIA
 	fi	
 
 .PHONY: push-dia-manifests
-push-dia-manifests: ## Push the DIA manifests snapshot to the Gitea repository
+push-dia-manifests: stage-dia-manifests ## Push the DIA manifests snapshot to the Gitea repository
 	@echo "--> GIT: Forcing full snapshot push of DIA manifests to $(FLUX_DIA_REPO)"
 
-	@cd $(DIA_MANIFESTS_DIR) && \
+	@cd $(BASE)/build/dia-manifests-staging && \
 		( \
 			rm -rf .git && \
 			git init -b $(FLUX_GIT_BRANCH) && \
@@ -131,42 +114,37 @@ push-dia-manifests: ## Push the DIA manifests snapshot to the Gitea repository
 	@echo "--> GIT: Full snapshot push completed"
 
 .PHONY: push-dia-grafana
-push-dia-grafana: ## Push the DIA Grafana dashboards snapshot to the Gitea repository
-	@echo "--> GIT: Forcing full snapshot push of DIA Grafana Dashboards to $(FLUX_DIA_GRAFANA_REPO)"
-
-	@cd $(DIA_GRAFANA_DIR) && \
-		( \
-			rm -rf .git && \
-			git init -b $(FLUX_GIT_BRANCH) && \
-			git remote add origin $(DIA_GRAFANA_REPO_URL) && \
-			git add -A && \
-			git commit --allow-empty -m "Authoritative snapshot of DIA manifests" && \
-			git config core.sshCommand 'ssh -o IdentitiesOnly=yes -i $(FLUX_SSH_KEY)' && \
-			git push --force origin $(FLUX_GIT_BRANCH) \
-		)
-
-	@echo "--> GIT: Full snapshot push completed"
+push-dia-grafana: push-dia-grafana-dashboards ## Deprecated: use push-dia-grafana-dashboards
 
 .PHONY: create-dia-kustomizations
 create-dia-kustomizations: ## Create Flux Kustomizations for DIA manifests
-	@echo "--> FLUX: Ensuring Kustomizations for DIA manifests exist"
+	@echo "--> FLUX: Ensuring Kustomizations for DIA manifests exist (SDCIO_ENABLED=$(SDCIO_ENABLED_NORM))"
 	@for d in $(DIA_MANIFESTS_DIR)/*/; do \
 		n=$$(basename "$$d"); \
-		if [ "$$n" != ".git" ]; then \
-			echo "Checking Kustomization for $$n..."; \
-			if $(FLUX) get kustomization "dia-$$n" -n flux-system 2>&1 | grep -q "not found"; then \
-				echo "Creating Kustomization for $$n..."; \
-				$(FLUX) create kustomization "dia-$$n" \
-				  --source=GitRepository/$(FLUX_DIA_REPO) \
-				  --path="./$$n" \
-				  --prune=true \
-				  --interval=1m \
-				  --timeout=1m \
-				  --namespace=flux-system; \
-			else \
-				echo "Kustomization for $$n already exists."; \
-			fi \
-		fi \
+		if [ "$$n" = ".git" ]; then continue; fi; \
+		skip=0; \
+		if [ "$(SDCIO_ENABLED_NORM)" = "NO" ]; then \
+			for s in $(SDCIO_FLUX_SKIP_DIRS); do \
+				if [ "$$n" = "$$s" ]; then skip=1; break; fi; \
+			done; \
+		fi; \
+		if [ "$$skip" = "1" ]; then \
+			echo "Skipping Kustomization dia-$$n (SDCIO disabled)"; \
+			continue; \
+		fi; \
+		echo "Checking Kustomization for $$n..."; \
+		if $(FLUX) get kustomization "dia-$$n" -n flux-system 2>&1 | grep -q "not found"; then \
+			echo "Creating Kustomization for $$n..."; \
+			$(FLUX) create kustomization "dia-$$n" \
+			  --source=GitRepository/$(FLUX_DIA_REPO) \
+			  --path="./$$n" \
+			  --prune=true \
+			  --interval=1m \
+			  --timeout=1m \
+			  --namespace=flux-system; \
+		else \
+			echo "Kustomization for $$n already exists."; \
+		fi; \
 	done
 
 
