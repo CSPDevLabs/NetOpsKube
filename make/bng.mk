@@ -17,14 +17,14 @@
 
 FLUX_BNG_REPO ?= nok-bng-resources
 FLUX_BNG_SECRET ?= nok-bng-auth
-BNG_MANIFESTS_DIR := ./nok-clabs/nok-bng/nok-manifests
+BNG_MANIFESTS_DIR := $(NOK_CLABS_DIR)/nok-bng/nok-manifests
 BNG_REPO_URL = ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_BNG_REPO).git
 
 .PHONY: try-nok-bng
 try-nok-bng: install-bng-pkg gitops-bng-kustomization portal-enable-bng annotate-auth-ingress-bng annotate-auth-ingress-gitea ## Deploy the BNG solution
 
 .PHONY: gitops-bng-kustomization
-gitops-bng-kustomization: gitea-create-bng-repo flux-create-bng-secret flux-create-bng-source push-bng-manifests create-bng-kustomizations ## Synchronize BNG manifests with Flux
+gitops-bng-kustomization: gitea-create-bng-repo gitea-create-grafana-dashboards-repo flux-create-bng-secret flux-create-bng-source push-bng-manifests push-bng-grafana-dashboards create-bng-kustomizations ## Synchronize BNG manifests with Flux
 	@echo "--> GITOPS: BNG repo in sync by Flux"
 
 .PHONY: deploy-clab-bng
@@ -50,7 +50,7 @@ destroy-clab-bng: check-tools git-clone-clab ## Destroys the Containerlab BNG to
 	
 
 .PHONY: install-bng-pkg
-install-bng-pkg: check-tools git-clone-kpt ## Installs the BNG kpt package from ./nok-kpt/nok-bng
+install-bng-pkg: check-tools git-clone-kpt configure-sdcio-kpt ## Installs the BNG kpt package from ./nok-kpt/nok-bng
 	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-bng,nok-bng,"--reconcile-timeout=5m", "--inventory-policy=adopt")
 
 .PHONY: gitea-create-bng-repo
@@ -97,10 +97,10 @@ flux-create-bng-source: ## Create the Flux GitRepository source for BNG
 	fi
 
 .PHONY: push-bng-manifests
-push-bng-manifests: ## Push the BNG manifests snapshot to the Gitea repository
+push-bng-manifests: stage-bng-manifests ## Push the BNG manifests snapshot to the Gitea repository
 	@echo "--> GIT: Forcing full snapshot push of BNG manifests to $(FLUX_BNG_REPO)"
 
-	@cd $(BNG_MANIFESTS_DIR) && \
+	@cd $(BASE)/build/bng-manifests-staging && \
 		( \
 			rm -rf .git && \
 			git init -b $(FLUX_GIT_BRANCH) && \
@@ -115,24 +115,33 @@ push-bng-manifests: ## Push the BNG manifests snapshot to the Gitea repository
 
 .PHONY: create-bng-kustomizations
 create-bng-kustomizations: ## Create Flux Kustomizations for BNG manifests
-	@echo "--> FLUX: Ensuring Kustomizations for BNG manifests exist"
+	@echo "--> FLUX: Ensuring Kustomizations for BNG manifests exist (SDCIO_ENABLED=$(SDCIO_ENABLED_NORM))"
 	@for d in $(BNG_MANIFESTS_DIR)/*/; do \
 		n=$$(basename "$$d"); \
-		if [ "$$n" != ".git" ]; then \
-			echo "Checking Kustomization for $$n..."; \
-			if $(FLUX) get kustomization "bng-$$n" -n flux-system 2>&1 | grep -q "not found"; then \
-				echo "Creating Kustomization for $$n..."; \
-				$(FLUX) create kustomization "bng-$$n" \
-				  --source=GitRepository/$(FLUX_BNG_REPO) \
-				  --path="./$$n" \
-				  --prune=true \
-				  --interval=1m \
-				  --timeout=1m \
-				  --namespace=flux-system; \
-			else \
-				echo "Kustomization for $$n already exists."; \
-			fi \
-		fi \
+		if [ "$$n" = ".git" ]; then continue; fi; \
+		skip=0; \
+		if [ "$(SDCIO_ENABLED_NORM)" = "NO" ]; then \
+			for s in $(SDCIO_FLUX_SKIP_DIRS); do \
+				if [ "$$n" = "$$s" ]; then skip=1; break; fi; \
+			done; \
+		fi; \
+		if [ "$$skip" = "1" ]; then \
+			echo "Skipping Kustomization bng-$$n (SDCIO disabled)"; \
+			continue; \
+		fi; \
+		echo "Checking Kustomization for $$n..."; \
+		if $(FLUX) get kustomization "bng-$$n" -n flux-system 2>&1 | grep -q "not found"; then \
+			echo "Creating Kustomization for $$n..."; \
+			$(FLUX) create kustomization "bng-$$n" \
+			  --source=GitRepository/$(FLUX_BNG_REPO) \
+			  --path="./$$n" \
+			  --prune=true \
+			  --interval=1m \
+			  --timeout=1m \
+			  --namespace=flux-system; \
+		else \
+			echo "Kustomization for $$n already exists."; \
+		fi; \
 	done
 
 .PHONY: portal-enable-bng

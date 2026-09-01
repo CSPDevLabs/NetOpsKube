@@ -41,6 +41,12 @@
 
 include make/settings.mk
 include make/troubleshoot.mk
+include make/deploy-tuning.mk
+
+ifndef GRAFANA_DASHBOARD_GITEA_BASE
+GRAFANA_DASHBOARD_GITEA_BASE := http://gitea-http.nok-git.svc.cluster.local:3000/$(GITEA_ADMIN_USER)/$(FLUX_GRAFANA_REPO)/raw/branch/main
+endif
+
 include make/bng.mk
 include make/dia.mk
 include make/auth.mk
@@ -49,8 +55,11 @@ include make/auth.mk
 PROXY_DEPLOYMENTS := \
 nok-bbm:coredns-updater \
 nok-bbm:blackbox-exporter \
-nok-base:grafana-operator-controller-manager \
-nok-base:config-server
+nok-base:grafana-operator-controller-manager
+
+ifeq ($(SDCIO_ENABLED_BOOL),1)
+PROXY_DEPLOYMENTS += nok-base:config-server
+endif
 
 ifneq ($(filter YES yes Yes,$(KEYCLOAK_ENABLED)),)
 PROXY_DEPLOYMENTS += \
@@ -72,11 +81,11 @@ generate-portal-pv: ## Synchronize portal files into the KinD control-plane node
 	@echo "--> PORTAL: Portal files synchronized"
 
 .PHONY: apply-kpt-overlays
-apply-kpt-overlays: ## Apply NetOpsKube overlays on top of cloned nok-kpt packages
+apply-kpt-overlays: git-clone-kpt ## Apply NetOpsKube overlays on top of cloned nok-kpt packages
 	@if [ ! -d "$(BASE)/overlays" ]; then \
 		echo "--> OVERLAY: No overlays directory, skipping" ;\
-	elif [ ! -d "$(NOK_KPT_DIR)" ]; then \
-		echo "Error: $(NOK_KPT_DIR) not found — run 'make git-clone-kpt' first" ;\
+	elif [ ! -f "$(NOK_KPT_DIR)/nok-base/Kptfile" ]; then \
+		echo "Error: $(NOK_KPT_DIR) is not a kpt checkout — run 'make git-clone-kpt' first" ;\
 		exit 1 ;\
 	else \
 		echo "--> OVERLAY: Applying NetOpsKube overlays to $(NOK_KPT_DIR)" ;\
@@ -131,8 +140,8 @@ update-kpt-lb-setters: git-clone-kpt $(YQ) ## Write KinD LB IPs into nok-kpt app
 		echo "Error: KinD cluster '$(KIND_CLUSTER_NAME)' not found — cannot detect network prefix" ;\
 		exit 1 ;\
 	fi ;\
-	if [ ! -d "$(NOK_KPT_DIR)" ]; then \
-		echo "Error: $(NOK_KPT_DIR) not found — run 'make git-clone-kpt' first" ;\
+	if [ ! -f "$(NOK_KPT_DIR)/nok-base/Kptfile" ]; then \
+		echo "Error: $(NOK_KPT_DIR) is not a kpt checkout — run 'make git-clone-kpt' first" ;\
 		exit 1 ;\
 	fi ;\
 	echo "--> KPT: KinD LB prefix $$IP_PREFIX → apply-setters.yaml (template: $(KIND_LB_DEFAULT_PREFIX))" ;\
@@ -182,6 +191,7 @@ delete-cluster: ## Delete the KinD cluster
 
 .PHONY: check-tools
 check-tools: $(KIND) $(KUBECTL) $(YQ) $(HELM) $(KPT) $(K9S) $(GH) $(CLAB) $(FLUX) create-tool-aliases ## Ensure all required tools are present and aliased
+	@command -v rsync >/dev/null 2>&1 || { echo "ERROR: rsync is required (install rsync package)" >&2; exit 1; }
 	@echo "--> All required tools found or downloaded."
 
 .PHONY: create-tool-aliases
@@ -211,11 +221,15 @@ help: ## Display this help message
 .PHONY: git-clone-kpt
 git-clone-kpt: ## Clones the CSPDevLabs/kpt repository into ./nok-kpt
 	@echo "--> GIT: Cloning $(KPT_REPO_URL) ($(KPT_REPO_BRANCH)) into $(NOK_KPT_DIR)"
-	@if [ ! -d "$(NOK_KPT_DIR)" ]; then \
-		git clone -b $(KPT_REPO_BRANCH) $(KPT_REPO_URL) $(NOK_KPT_DIR) ;\
-	else \
-		echo "--> GIT: $(NOK_KPT_DIR) already exists. Skipping clone." ;\
+	@if [ -f "$(NOK_KPT_DIR)/nok-base/Kptfile" ]; then \
+		echo "--> GIT: $(NOK_KPT_DIR) is already a kpt checkout. Skipping clone." ;\
 		echo "--> GIT: Ensure branch $(KPT_REPO_BRANCH) is checked out (override with NOK_KPT_DIR for a local kpt checkout)." ;\
+	elif [ -d "$(NOK_KPT_DIR)" ]; then \
+		echo "Error: $(NOK_KPT_DIR) exists but is not a kpt checkout (missing nok-base/Kptfile)" >&2 ;\
+		echo "Error: Remove the directory or point NOK_KPT_DIR elsewhere, then re-run 'make git-clone-kpt'" >&2 ;\
+		exit 1 ;\
+	else \
+		git clone -b $(KPT_REPO_BRANCH) $(KPT_REPO_URL) $(NOK_KPT_DIR) ;\
 	fi
 
 .PHONY: git-clone-clab
@@ -306,7 +320,7 @@ start-ingress-port-forward: ## Starts background port-forward for ingress-nginx-
 	@echo "    To stop it, find the process using 'ps aux | grep \"kubectl port-forward\"' and 'kill <PID>'."
 
 .PHONY: install-base-pkg
-install-base-pkg: update-kpt-lb-setters ## Installs the base kpt package from ./nok-kpt/nok-base
+install-base-pkg: git-clone-kpt update-kpt-lb-setters configure-sdcio-kpt ## Installs the base kpt package from ./nok-kpt/nok-base
 	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-base,nok-base,"--reconcile-timeout=5m", "--inventory-policy=adopt")	
 
 .PHONY: install-base-final
@@ -331,7 +345,7 @@ wait-for-metallb-ready: ## Wait for the Kubernetes Metallb node to be ready
 	}	
 
 .PHONY: install-bbm-pkg
-install-bbm-pkg: ## Installs the BBM (self-monitoring and observability) kpt package from ./nok-kpt/nok-bbm
+install-bbm-pkg: update-kpt-tuning-setters ## Installs the BBM (self-monitoring and observability) kpt package from ./nok-kpt/nok-bbm
 	@echo "--> INSTALL: [\033[1;34mBBM\033[0m] - Applying kpt package with setters"
 	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-bbm,nok-bbm,"--reconcile-timeout=5m", "--inventory-policy=adopt")
 
