@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: nok-haproxy
+  namespace: nok-base
+  labels:
+    app: nok-haproxy
+spec:
+  selector:
+    app: nok-haproxy
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080

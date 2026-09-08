@@ -1,0 +1,51 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nok-apps-portal-nginx-config
+  namespace: nok-base
+data:
+  nok-portal.conf: |
+    server {
+        listen 80;
+        server_name localhost;
+        absolute_redirect off;
+
+        root /usr/share/nginx/html;
+
+        # Portal home is public; OAuth applies on app ingresses (Grafana, BBM, etc.).
+        location / {
+            add_header Cache-Control "no-store, no-cache, must-revalidate, max-age=0";
+            add_header Pragma "no-cache";
+            add_header Expires "0";
+            try_files $uri $uri/ /index.html;
+        }
+
+        location = /index.html {
+            add_header Cache-Control "no-store, no-cache, must-revalidate, max-age=0";
+            add_header Pragma "no-cache";
+            add_header Expires "0";
+        }
+
+        # Login via Keycloak at /login (HAProxy redirects to netopskube realm).
+        location = /login {
+            return 302 /auth/realms/netopskube/protocol/openid-connect/auth?client_id=nok-portal&redirect_uri=http%3A%2F%2Fbng.nok.local%3A8080%2F&response_type=code&scope=openid;
+        }
+
+        location = /menu-config.json {
+            default_type application/json;
+            add_header Cache-Control "no-store";
+            add_header Pragma "no-cache";
+            add_header Expires "0";
+            try_files /menu-config.json =404;
+        }
+
+        location = /healthz {
+            add_header Content-Type text/plain;
+            return 200 "OK\n";
+        }
+
+        location ~* \.(js|css|png|jpg|jpeg|gif|ico)$ {
+            add_header Cache-Control "no-store, no-cache, must-revalidate, max-age=0";
+            log_not_found off;
+        }
+    }

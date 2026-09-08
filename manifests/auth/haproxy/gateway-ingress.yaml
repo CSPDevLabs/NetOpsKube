@@ -1,0 +1,23 @@
+# Single ingress entry — all traffic via HAProxy (Keycloak + portal).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nok-gateway-ingress
+  namespace: nok-base
+  annotations:
+    netopskube.io/bbm: "true"
+    netopskube.io/prober: http
+    netopskube.io/gateway: haproxy
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: bng.nok.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: nok-haproxy
+                port:
+                  number: 80

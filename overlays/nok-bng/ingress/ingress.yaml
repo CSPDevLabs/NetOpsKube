@@ -12,21 +12,21 @@ spec:
   - host: bng.nok.local # kpt-set: ${ingress-host}
     http:
       paths:     
-      - path: /prometheus(/|$)(.*)
+      - path: /nok-bng/prometheus(/|$)(.*)
         pathType: ImplementationSpecific
         backend:
           service:
             name: prometheus-operated
             port:
               number: 9090
-      - path: /grafana(/|$)(.*)
+      - path: /nok-bng/grafana(/|$)(.*)
         pathType: ImplementationSpecific
         backend:
           service:
             name: grafana-service
             port:
               number: 3000            
-      - path: /alertmanager(/|$)(.*)
+      - path: /nok-bng/alertmanager(/|$)(.*)
         pathType: ImplementationSpecific
         backend:
           service:

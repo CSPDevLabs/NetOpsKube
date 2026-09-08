@@ -8,6 +8,10 @@
 
 BNG_NAMESPACE ?= nok-bng
 
+.PHONY: cluster-prune
+cluster-prune: ## Remove aura-kind, duplicate DIA portal, alert-webhook-test (CLUSTER_PRUNE_OPTS=--all-dia)
+	@bash scripts/cluster-prune.sh $(CLUSTER_PRUNE_OPTS)
+
 .PHONY: help-troubleshoot
 help-troubleshoot: ## List troubleshooting targets only
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(lastword $(MAKEFILE_LIST)) | sort \

@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nok-haproxy
+  namespace: nok-base
+  labels:
+    app: nok-haproxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nok-haproxy
+  template:
+    metadata:
+      labels:
+        app: nok-haproxy
+    spec:
+      containers:
+        - name: haproxy
+          image: haproxy:2.8.15
+          ports:
+            - containerPort: 8080
+              name: http
+          volumeMounts:
+            - name: haproxy-cfg
+              mountPath: /usr/local/etc/haproxy/haproxy.cfg
+              subPath: haproxy.cfg
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+              httpHeaders:
+                - name: Host
+                  value: bng.nok.local:8080
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: haproxy-cfg
+          configMap:
+            name: nok-haproxy-cfg

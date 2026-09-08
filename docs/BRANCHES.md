@@ -2,13 +2,18 @@
 
 NetOpsKube work is split so **Epic 9** (tests / recipe verify / CI) stays a separate PR from **deploy options** (items 1·2·3).
 
-## Branches
+## Branch layout
 
-| Repo | Deploy options (1·2·3) | Epic 9 only |
-|------|------------------------|-------------|
-| **netopskube** | `feat/deploy-options` | `feat/bats-unit-tests` |
-| **kpt** | `nok-restructure` (+ BBM tuning setters) | `feat/portal-embedding` (legacy) |
-| **nok-clabs** | `nok-restructure` (+ Grafana Gitea URLs) | — |
+NetOpsKube work is split across focused branches; merge to `main` in this order:
+
+| Order | Branch | Repo | What |
+|-------|--------|------|------|
+| 1 | `feat/deploy-options` | netopskube | SDCIO, Prom/gNMIc tuning, Grafana via Gitea |
+| 2 | `nok-restructure` | kpt | Unified portal in nok-base, recipe `.krmignore` for legacy portal |
+| 3 | `feat/bats-unit-tests` | netopskube | Epic 9 tests + `EPIC9_ENABLED` gate |
+| 4 | auth (on main or `feat/keycloak`) | netopskube + kpt | HAProxy + Keycloak (`KEYCLOAK_ENABLED=YES`) |
+
+## Branches (detail)
 
 ## netopskube: `EPIC9_ENABLED`
 

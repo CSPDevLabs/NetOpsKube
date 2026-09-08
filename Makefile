@@ -103,8 +103,7 @@ PROXY_DEPLOYMENTS += nok-base:config-server
 endif
 
 ifneq ($(filter YES yes Yes,$(KEYCLOAK_ENABLED)),)
-PROXY_DEPLOYMENTS += \
-	nok-bng:oauth2-proxy
+PROXY_DEPLOYMENTS += nok-base:nok-haproxy
 endif
 
 # --- Git Repository Configuration ---
@@ -114,16 +113,12 @@ SRSIM_LICENSE_FILE ?= $(NOK_CLABS_DIR)/nok-bng/srsim-lic-25.txt
 
 NOK_KPT_DIR ?= $(BASE)/nok-kpt
 KPT_REPO_URL ?= https://github.com/CSPDevLabs/kpt
-KPT_REPO_BRANCH ?= feat/ip-setters
+KPT_REPO_BRANCH ?= nok-restructure
 
 NOK_CLABS_DIR ?= $(BASE)/nok-clabs
 CLABS_REPO_URL ?= https://github.com/CSPDevLabs/nok-clabs
 
-NOK_KEYCLOAK_DIR ?= $(BASE)/nok-portal-auth
-KEYCLOAK_REPO_URL ?= https://github.com/CSPDevLabs/nok-portal-auth
-KEYCLOAK_REPO_BRANCH ?= keycloak
-KEYCLOAK_DIR ?= $(BASE)/nok-portal-auth/keycloak
-OAUTH2_PROXY_DIR  ?= $(BASE)/nok-portal-auth/oauth2-proxy
+# Keycloak / HAProxy paths: see make/auth.mk (manifests/auth/)
 
 # Internal helper for output indentation
 INDENT_OUT ?= sed 's/^/    /'
@@ -194,6 +189,8 @@ DIA_GRAFANA_DIR := ./nok-clabs/nok-dia/grafana-dashboards
 DIA_REPO_URL = ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_DIA_REPO).git
 
 include make/deploy-tuning.mk
+include make/auth.mk
+include make/portal.mk
 
 DIA_GRAFANA_REPO_URL = ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_DIA_GRAFANA_REPO).git
 
@@ -605,8 +602,9 @@ start-ingress-port-forward: ## Starts background port-forward for ingress-nginx-
 	@echo "--> K8S: Ingress port-forward started in background."
 	@echo "    To stop it, find the process using 'ps aux | grep \"kubectl port-forward\"' and 'kill <PID>'."
 
-.PHONY: install-base-pkg
-install-base-pkg: update-kpt-lb-setters configure-sdcio-kpt ## Installs the base kpt package from ./nok-kpt/nok-base
+.PHONY: install-base-pkg install-base-pkg-kpt
+install-base-pkg: update-kpt-lb-setters configure-sdcio-kpt install-base-pkg-kpt sync-portal-files ## nok-base kpt + portal static ConfigMap
+install-base-pkg-kpt:
 	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-base,nok-base,"--reconcile-timeout=5m", "--inventory-policy=adopt")	
 
 .PHONY: install-bbm-pkg
@@ -993,62 +991,6 @@ create-dia-kustomizations:
 		fi; \
 	done
 
-
-
-
-
-.PHONY: configure-auth
-
-ifeq ($(KEYCLOAK_ENABLED),YES)
-
-configure-auth:
-	@echo "--> AUTH: Configure nok-portal-auth"
-
-	@if [ ! -d "$(NOK_KEYCLOAK_DIR)" ]; then \
-		git clone -b $(KEYCLOAK_REPO_BRANCH) $(KEYCLOAK_REPO_URL) $(NOK_KEYCLOAK_DIR) ;\
-	else \
-		echo "--> GIT: $(NOK_KEYCLOAK_DIR) already exists. Skipping clone." ;\
-	fi
-
-	@$(KUBECTL) apply -f $(KEYCLOAK_DIR)/postgres-secret.yaml
-	@$(KUBECTL) apply -f $(KEYCLOAK_DIR)/postgres-service.yaml
-	@$(KUBECTL) apply -f $(KEYCLOAK_DIR)/postgres-statefulset.yaml
-
-	@$(KUBECTL) apply -f $(KEYCLOAK_DIR)/keycloak-portal-html-config.yaml
-	@$(KUBECTL) rollout restart deployment nok-apps-portal-app -n nok-bng
-	@$(KUBECTL) apply -f $(KEYCLOAK_DIR)/keycloak-admin-secret.yaml
-	@$(KUBECTL) apply -f $(KEYCLOAK_DIR)/keycloak-realm-configmap.yaml
-	@$(KUBECTL) apply -f $(KEYCLOAK_DIR)/keycloak-svc.yaml
-	@$(KUBECTL) apply -f $(KEYCLOAK_DIR)/keycloak-deploy.yaml
-	@$(KUBECTL) apply -f $(KEYCLOAK_DIR)/keycloak-ingress.yaml
-
-	@$(KUBECTL) apply -f $(OAUTH2_PROXY_DIR)/oauth2-proxy-secret.yaml
-	@$(KUBECTL) apply -f $(OAUTH2_PROXY_DIR)/oauth2-proxy-svc.yaml
-	@$(KUBECTL) apply -f $(OAUTH2_PROXY_DIR)/oauth2-proxy-deploy.yaml
-	@$(KUBECTL) apply -f $(OAUTH2_PROXY_DIR)/oauth2-proxy-ingress.yaml
-
-	@echo "--> AUTH: Patching application ingresses"
-
-	@$(KUBECTL) annotate ingress nok-apps-ingress \
-		-n nok-bng \
-		nginx.ingress.kubernetes.io/auth-url="http://oauth2-proxy.nok-bng.svc.cluster.local/oauth2/auth" \
-		nginx.ingress.kubernetes.io/auth-signin="http://bng.nok.local:8080/oauth2/start?rd=\$$escaped_request_uri" \
-		--overwrite
-
-	@$(KUBECTL) annotate ingress nok-apps-portal-ingress \
-		-n nok-bng \
-		nginx.ingress.kubernetes.io/auth-url="http://oauth2-proxy.nok-bng.svc.cluster.local/oauth2/auth" \
-		nginx.ingress.kubernetes.io/auth-signin="http://bng.nok.local:8080/oauth2/start?rd=\$$escaped_request_uri" \
-		--overwrite
-
-	@echo "--> AUTH: Deployment completed"
-
-else
-
-configure-auth:
-	@echo "--> AUTH: Keycloak disabled. Skipping authentication deployment."
-
-endif
 
 
 .PHONY: set-proxy-env

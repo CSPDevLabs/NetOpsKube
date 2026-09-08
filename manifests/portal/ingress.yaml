@@ -1,0 +1,22 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nok-apps-portal-ingress
+  namespace: nok-base
+  annotations:
+    netopskube.io/bbm: "true"
+    netopskube.io/prober: http
+    netopskube.io/bbm-oauth: "true"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: bng.nok.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: nok-haproxy
+            port:
+              number: 80
