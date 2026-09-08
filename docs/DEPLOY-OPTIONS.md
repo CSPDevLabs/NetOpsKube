@@ -71,6 +71,6 @@ Push dashboards: `make push-grafana-dashboards` (included in `gitops-bng-kustomi
 
 Interim without Gitea: set `GRAFANA_DASHBOARD_SOURCE=upstream` or embed JSON in manifests manually (GrafanaDashboard `spec.json`).
 
-## Branch layout
+## Recipe testing
 
-Deploy options and Epic 9 recipe testing are maintained on separate branches. See [BRANCHES.md](BRANCHES.md).
+See [EPIC9.md](EPIC9.md) and [test/README.md](../test/README.md) for per-recipe verification (`make verify-recipe-bng`, `make test-recipes`).
