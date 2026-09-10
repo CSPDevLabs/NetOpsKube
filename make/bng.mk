@@ -22,13 +22,14 @@ BNG_REPO_URL := ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_BNG_REPO)
 
 ## Deploy BNG and GitOps
 .PHONY: try-nok-bng
-try-nok-bng: install-bng-pkg install-git-pkg gitops-init gitops-bng-kustomization portal-enable-bng annotate-auth-ingress-bng annotate-auth-ingress-gitea
+try-nok-bng: install-bng-pkg gitops-bng-kustomization portal-enable-bng annotate-auth-ingress-bng annotate-auth-ingress-gitea
 
 .PHONY: gitops-bng-kustomization
 gitops-bng-kustomization: gitea-create-bng-repo flux-create-bng-secret flux-create-bng-source push-bng-manifests create-bng-kustomizations
 	@echo "--> GITOPS: BNG repo in sync by Flux"
 
 .PHONY: deploy-clab-bng
+deploy-clab-bng: NOK_CLAB=nok-bng
 deploy-clab-bng: check-tools git-clone-clab check-clab-prerequisites ## Deploys the Containerlab BNG topology
 	@echo "--> CLAB: Deploying BNG topology from $(NOK_CLABS_DIR)/nok-bng"
 	@if [ -d "$(NOK_CLABS_DIR)/nok-bng" ]; then \

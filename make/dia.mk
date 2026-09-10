@@ -25,13 +25,14 @@ DIA_GRAFANA_REPO_URL := ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_D
 
 ## Deploy DIA and GitOps
 .PHONY: try-nok-dia
-try-nok-dia: install-dia-pkg install-git-pkg gitops-init gitops-dia-kustomization portal-enable-dia annotate-auth-ingress-dia annotate-auth-ingress-gitea
+try-nok-dia: install-dia-pkg gitops-dia-kustomization portal-enable-dia annotate-auth-ingress-dia annotate-auth-ingress-gitea
 
 .PHONY: gitops-dia-kustomization
 gitops-dia-kustomization: gitea-create-dia-repo gitea-create-dia-grafana-repo flux-create-dia-secret flux-create-dia-source push-dia-manifests push-dia-grafana create-dia-kustomizations
 	@echo "--> GITOPS: DIA repo in sync by Flux"
 
 .PHONY: deploy-clab-dia
+deploy-clab-dia: NOK_CLAB=nok-dia
 deploy-clab-dia: check-tools git-clone-clab check-clab-prerequisites ## Deploys the Containerlab DIA topology
 	@echo "--> CLAB: Deploying DIA topology from $(NOK_CLABS_DIR)/nok-dia"
 	@if [ -d "$(NOK_CLABS_DIR)/nok-dia" ]; then \

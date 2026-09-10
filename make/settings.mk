@@ -101,7 +101,7 @@ FLUX ?= $(TOOLS)/flux
 # --- Git Repository Configuration ---
 # Define the SROS image and license file for the BNG deployment
 SRLINUX_IMAGE ?= registry.srlinux.dev/pub/nokia_srsim:25.10.R1
-SRSIM_LICENSE_FILE ?= $(NOK_CLABS_DIR)/nok-bng/srsim-lic-25.txt
+SRSIM_LICENSE_FILE ?= $(NOK_CLABS_DIR)/$(NOK_CLAB)/srsim-lic-25.txt
 
 NOK_KPT_DIR ?= $(BASE)/nok-kpt
 KPT_REPO_URL ?= https://github.com/CSPDevLabs/kpt
