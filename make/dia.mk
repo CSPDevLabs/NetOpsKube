@@ -23,12 +23,11 @@ DIA_GRAFANA_DIR := ./nok-clabs/nok-dia/grafana-dashboards
 DIA_REPO_URL := ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_DIA_REPO).git
 DIA_GRAFANA_REPO_URL := ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_DIA_GRAFANA_REPO).git
 
-## Deploy DIA and GitOps
 .PHONY: try-nok-dia
-try-nok-dia: install-dia-pkg gitops-dia-kustomization portal-enable-dia annotate-auth-ingress-dia annotate-auth-ingress-gitea
+try-nok-dia: install-dia-pkg gitops-dia-kustomization portal-enable-dia annotate-auth-ingress-dia annotate-auth-ingress-gitea  ## Deploy the DIA solution
 
 .PHONY: gitops-dia-kustomization
-gitops-dia-kustomization: gitea-create-dia-repo gitea-create-dia-grafana-repo flux-create-dia-secret flux-create-dia-source push-dia-manifests push-dia-grafana create-dia-kustomizations
+gitops-dia-kustomization: gitea-create-dia-repo gitea-create-dia-grafana-repo flux-create-dia-secret flux-create-dia-source push-dia-manifests push-dia-grafana create-dia-kustomizations ## Synchronize DIA manifests with Flux
 	@echo "--> GITOPS: DIA repo in sync by Flux"
 
 .PHONY: deploy-clab-dia
@@ -53,12 +52,12 @@ destroy-clab-dia: check-tools git-clone-clab ## Destroys the Containerlab DIA to
 	fi
 
 .PHONY: install-dia-pkg
-install-dia-pkg: check-tools git-clone-kpt ## Installs the base kpt package from ./nok-kpt/nok-dia
+install-dia-pkg: check-tools git-clone-kpt ## Installs the DIA kpt package from ./nok-kpt/nok-dia
 	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-dia,nok-dia,"--reconcile-timeout=5m", "--inventory-policy=adopt")
 
 
 .PHONY: gitea-create-dia-repo
-gitea-create-dia-repo:
+gitea-create-dia-repo: ## Create the DIA GitOps repository in Gitea
 	@echo "--> GITEA: Ensuring repo $(FLUX_DIA_REPO) exists"
 	@$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) \
 	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
@@ -72,7 +71,7 @@ gitea-create-dia-repo:
 	  http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/user/repos
 
 .PHONY: gitea-create-dia-grafana-repo
-gitea-create-dia-grafana-repo:
+gitea-create-dia-grafana-repo: ## Create the DIA Grafana dashboard repository in Gitea
 	@echo "--> GITEA: Ensuring repo $(FLUX_DIA_GRAFANA_REPO) exists"
 	@$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) \
 	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
@@ -86,7 +85,7 @@ gitea-create-dia-grafana-repo:
 	  http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/user/repos
 	
 .PHONY: flux-create-dia-secret
-flux-create-dia-secret:
+flux-create-dia-secret: ## Create the Flux Git authentication secret for DIA
 	@echo "--> FLUX: Ensuring Git secret $(FLUX_DIA_SECRET) exists"
 	@if ! $(KUBECTL) get secret $(FLUX_DIA_SECRET) -n flux-system > /dev/null 2>&1; then \
 		echo "Creating Git secret $(FLUX_DIA_SECRET)..."; \
@@ -100,7 +99,7 @@ flux-create-dia-secret:
 	fi
 
 .PHONY: flux-create-dia-source
-flux-create-dia-source:
+flux-create-dia-source: ## Create the Flux GitRepository source for DIA
 	@echo "--> FLUX: Ensuring GitRepository source $(FLUX_DIA_REPO) exists"
 	@if ! $(KUBECTL) get gitrepository $(FLUX_DIA_REPO) -n flux-system > /dev/null 2>&1; then \
 		echo "Creating GitRepository source $(FLUX_DIA_REPO)..."; \
@@ -115,7 +114,7 @@ flux-create-dia-source:
 	fi	
 
 .PHONY: push-dia-manifests
-push-dia-manifests:
+push-dia-manifests: ## Push the DIA manifests snapshot to the Gitea repository
 	@echo "--> GIT: Forcing full snapshot push of DIA manifests to $(FLUX_DIA_REPO)"
 
 	@cd $(DIA_MANIFESTS_DIR) && \
@@ -132,7 +131,7 @@ push-dia-manifests:
 	@echo "--> GIT: Full snapshot push completed"
 
 .PHONY: push-dia-grafana
-push-dia-grafana:
+push-dia-grafana: ## Push the DIA Grafana dashboards snapshot to the Gitea repository
 	@echo "--> GIT: Forcing full snapshot push of DIA Grafana Dashboards to $(FLUX_DIA_GRAFANA_REPO)"
 
 	@cd $(DIA_GRAFANA_DIR) && \
@@ -149,7 +148,7 @@ push-dia-grafana:
 	@echo "--> GIT: Full snapshot push completed"
 
 .PHONY: create-dia-kustomizations
-create-dia-kustomizations:
+create-dia-kustomizations: ## Create Flux Kustomizations for DIA manifests
 	@echo "--> FLUX: Ensuring Kustomizations for DIA manifests exist"
 	@for d in $(DIA_MANIFESTS_DIR)/*/; do \
 		n=$$(basename "$$d"); \
@@ -172,7 +171,7 @@ create-dia-kustomizations:
 
 
 .PHONY: portal-enable-dia
-portal-enable-dia:
+portal-enable-dia: ## Enable the DIA solution in the NetOpsKube Portal
 	@echo "--> PORTAL: Enabling DIA menu"
 	@$(KUBECTL) get configmap nok-apps-menu-config -n nok-base -o json | \
 	jq '.data["menu-config.json"] |= (fromjson | .solutions |= map(if .id == "nok-dia" then .deployed = "yes" else . end) | tojson)' | \

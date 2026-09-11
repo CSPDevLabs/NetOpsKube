@@ -57,17 +57,15 @@ PROXY_DEPLOYMENTS += \
 	nok-base:oauth2-proxy
 endif
 
-## Deploy Base Apps, clone kpt and clab repos, install base packages / load balancer / prometheus and gnmic operators, port forward
 .PHONY: try-nok
-try-nok: check-tools cluster-up cluster-wait-for-node-ready generate-portal-pv git-clone-clab install-base-pkg install-lb-pkg install-prom-oper install-gnmic-oper start-ingress-port-forward install-bbm-pkg install-base-final install-git-pkg gitops-init configure-auth
+try-nok: check-tools cluster-up cluster-wait-for-node-ready generate-portal-pv git-clone-clab install-base-pkg install-lb-pkg install-prom-oper install-gnmic-oper start-ingress-port-forward install-bbm-pkg install-base-final install-git-pkg gitops-init configure-auth ## Deploy Base Apps, clone kpt and clab repos, install base packages / load balancer / prometheus and gnmic operators
 
-## Create Gitea admin, create Flux repo, add SSH key, bootstrap Flux
 .PHONY: gitops-init
-gitops-init: gitea-create-admin gitea-create-flux-repo gitea-add-ssh-key  flux-bootstrap 
+gitops-init: gitea-create-admin gitea-create-flux-repo gitea-add-ssh-key flux-bootstrap ## Create Gitea admin, create Flux repo, add SSH key, bootstrap Flux
 	@echo "--> GITOPS: Cluster is now managed by Flux"
 
 .PHONY: generate-portal-pv
-generate-portal-pv:
+generate-portal-pv: ## Synchronize portal files into the KinD control-plane node
 	@echo "--> PORTAL: Syncing portal files into Kind node"
 	@docker exec $(KIND_CLUSTER_NAME)-control-plane rm -rf /portal
 	@docker cp $(NOK_KPT_DIR)/nok-base/portal $(KIND_CLUSTER_NAME)-control-plane:/portal
@@ -188,9 +186,8 @@ help: ## Display this help message
 
 # --- Git Clone Targets ---
 
-## Clones the CSPDevLabs/kpt repository into ./nok-kpt
 .PHONY: git-clone-kpt
-git-clone-kpt:
+git-clone-kpt: ## Clones the CSPDevLabs/kpt repository into ./nok-kpt
 	@echo "--> GIT: Cloning $(KPT_REPO_URL) ($(KPT_REPO_BRANCH)) into $(NOK_KPT_DIR)"
 	@if [ ! -d "$(NOK_KPT_DIR)" ]; then \
 		git clone -b $(KPT_REPO_BRANCH) $(KPT_REPO_URL) $(NOK_KPT_DIR) ;\
@@ -199,9 +196,8 @@ git-clone-kpt:
 		echo "--> GIT: Ensure branch $(KPT_REPO_BRANCH) is checked out (override with NOK_KPT_DIR for a local kpt checkout)." ;\
 	fi
 
-## Clones the CSPDevLabs/nok-clabs repository into ./nok-clabs
 .PHONY: git-clone-clab
-git-clone-clab:
+git-clone-clab: ## Clones the CSPDevLabs/nok-clabs repository into ./nok-clabs
 	@echo "--> GIT: Cloning $(CLABS_REPO_URL) into $(NOK_CLABS_DIR)"
 	@if [ ! -d "$(NOK_CLABS_DIR)" ]; then \
 		git clone -b nok-restructure $(CLABS_REPO_URL) $(NOK_CLABS_DIR) ;\
@@ -209,9 +205,8 @@ git-clone-clab:
 		echo "--> GIT: $(NOK_CLABS_DIR) already exists. Skipping clone." ;\
 	fi
 
-## Checks for required Docker image and SROS license file for Containerlab
 .PHONY: check-clab-prerequisites
-check-clab-prerequisites:
+check-clab-prerequisites: ## Checks for required Docker image and SROS license file for Containerlab
 	@echo "--> CLAB: Checking prerequisites for CLAB deployment..."
 	@{ \
 		if [ -z "$$(docker images -q $(SRLINUX_IMAGE) 2> /dev/null)" ]; then \
@@ -288,23 +283,20 @@ start-ingress-port-forward: ## Starts background port-forward for ingress-nginx-
 	@echo "--> K8S: Ingress port-forward started in background."
 	@echo "    To stop it, find the process using 'ps aux | grep \"kubectl port-forward\"' and 'kill <PID>'."
 
-## Installs the base kpt package from ./nok-kpt/nok-base
 .PHONY: install-base-pkg
-install-base-pkg: update-kpt-lb-setters
+install-base-pkg: update-kpt-lb-setters ## Installs the base kpt package from ./nok-kpt/nok-base
 	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-base,nok-base,"--reconcile-timeout=5m", "--inventory-policy=adopt")	
 
 .PHONY: install-base-final
 install-base-final: update-kpt-lb-setters
 	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-base,nok-base,"--reconcile-timeout=5m", "--inventory-policy=adopt")	
 
-## Installs the base kpt package from ./nok-kpt/nok-git
 .PHONY: install-git-pkg
-install-git-pkg: install-lb-pkg
+install-git-pkg: install-lb-pkg ## Installs the base kpt package from ./nok-kpt/nok-git
 	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-git,nok-git,"--reconcile-timeout=5m", "--inventory-policy=adopt")
 
-## Installs the base kpt package from ./nok-kpt/nok-lb
 .PHONY: install-lb-pkg
-install-lb-pkg: wait-for-metallb-ready
+install-lb-pkg: wait-for-metallb-ready ## Installs the base kpt package from ./nok-kpt/nok-lb
 	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-lb,nok-lb,"--reconcile-timeout=5m", "")		
 
 .PHONY: wait-for-metallb-ready
@@ -312,18 +304,17 @@ wait-for-metallb-ready: ## Wait for the Kubernetes Metallb node to be ready
 	@echo "--> KIND: Waiting for Metallb Controller to be ready"
 	@{ \
 		START=$$(date +%s) ; \
-		$(KUBECTL) wait --for=condition=available deployment/controller -n metallb-system --timeout=5m --timeout=5m ; \
+		$(KUBECTL) wait --for=condition=available deployment/controller -n metallb-system --timeout=5m ; \
 		echo "--> KIND: Node ready check took $$(( $$(date +%s) - $$START ))s" ; \
 	}	
 
-## Installs the BBM (self-monitotoring and observability) kpt package from ./nok-kpt/nok-bbm
 .PHONY: install-bbm-pkg
-install-bbm-pkg:
+install-bbm-pkg: ## Installs the BBM (self-monitoring and observability) kpt package from ./nok-kpt/nok-bbm
 	@echo "--> INSTALL: [\033[1;34mBBM\033[0m] - Applying kpt package with setters"
 	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-bbm,nok-bbm,"--reconcile-timeout=5m", "--inventory-policy=adopt")
 
 .PHONY: install-mcp-bng-pkg
-install-mcp-bng-pkg: ## check-tools git-clone-kpt install-base-pkg install-lb-pkg ## Installs the MCP controller kpt package from ./nok-kpt/nok-base-mcp-bng
+install-mcp-bng-pkg: ## Installs the MCP controller kpt package from ./nok-kpt/nok-base-mcp-bng
 	@echo -e "--> INSTALL: [\033[1;34mMCP BNG\033[0m] - Checking prerequisites..."
 	@if ! $(KUBECTL) version --client &>/dev/null; then \
 		echo "[ERROR]: kubectl is not working or not configured. Please ensure your kubeconfig is set." >&2; \
@@ -367,7 +358,7 @@ install-gnmic-oper: $(KUBECTL) ## Installs the GNMIc Operator manifest
 	@echo -e "--> INSTALL: [\033[0;32mGNMIc Operator\033[0m] - Manifest applied successfully."
 
 .PHONY: gitea-create-admin
-gitea-create-admin:
+gitea-create-admin: ## Create the Gitea administrator user
 	@echo "--> GITEA: Ensuring admin user exists"
 	@POD="$(call GET_GITEA_POD)" ;\
 	if [ -z "$$POD" ]; then \
@@ -387,7 +378,7 @@ gitea-create-admin:
 	fi
 
 .PHONY: gitea-create-flux-repo
-gitea-create-flux-repo:
+gitea-create-flux-repo: ## Create the Flux Git repository in Gitea
 	@echo "--> GITEA: Waiting for API to become available (max 3 minutes)"
 	@set -e; \
 	timeout=180; \
@@ -424,7 +415,7 @@ gitea-create-flux-repo:
 
 
 .PHONY: gitea-add-ssh-key
-gitea-add-ssh-key:
+gitea-add-ssh-key: ## Add SSH key to Gitea
 	@set -e; \
 	echo "--> GITEA: Ensuring SSH key is registered"; \
 	\
@@ -467,7 +458,7 @@ gitea-add-ssh-key:
 	ssh -T -i "$(FLUX_SSH_KEY)" -o BatchMode=yes -o ConnectTimeout=5 git@"$(GITEA_SSH_HOST)" || true
 
 .PHONY: flux-bootstrap
-flux-bootstrap: check-tools gitea-create-admin gitea-create-flux-repo gitea-add-ssh-key
+flux-bootstrap: check-tools gitea-create-admin gitea-create-flux-repo gitea-add-ssh-key ## Bootstrap Flux using the Gitea Git repository
 	@echo "--> GITEA: Ensuring repository $(FLUX_GIT_REPO) exists"
 	@$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
 	  http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/repos/$(GITEA_ADMIN_USER)/$(FLUX_GIT_REPO) \
@@ -490,7 +481,7 @@ flux-bootstrap: check-tools gitea-create-admin gitea-create-flux-repo gitea-add-
 	  --verbose  
 
 .PHONY: set-proxy-env
-set-proxy-env:
+set-proxy-env: ## Apply HTTP/HTTPS proxy environment variables to configured deployments
 	@echo "--> PROXY: Applying proxy env to deployments"
 	@for item in $(PROXY_DEPLOYMENTS); do \
 		NS=$$(echo $$item | cut -d: -f1); \
@@ -520,7 +511,7 @@ set-proxy-env:
 
 
 .PHONY: unset-proxy-env
-unset-proxy-env:
+unset-proxy-env: ## Remove HTTP/HTTPS proxy environment variables from configured deployments
 	@echo "--> PROXY: Removing proxy env from deployments"
 	@for item in $(PROXY_DEPLOYMENTS); do \
 		NS=$$(echo $$item | cut -d: -f1); \
@@ -536,7 +527,7 @@ unset-proxy-env:
 
 
 .PHONY: backup-deployments
-backup-deployments:
+backup-deployments: ## Back up configured deployment manifests before proxy changes
 	@mkdir -p backup
 	@for item in $(PROXY_DEPLOYMENTS); do \
 		NS=$$(echo $$item | cut -d: -f1); \

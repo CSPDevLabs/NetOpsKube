@@ -26,7 +26,7 @@ OAUTH2_PROXY_DIR  ?= $(BASE)/nok-portal-auth/oauth2-proxy
 
 
 .PHONY: clone-keycloak-repo
-clone-keycloak-repo:
+clone-keycloak-repo: ## Clone the Keycloak authentication repository
 	@echo "--> GIT: Ensuring nok-portal-auth repository exists"
 	@if [ ! -d "$(NOK_KEYCLOAK_DIR)" ]; then \
 		git clone -b $(KEYCLOAK_REPO_BRANCH) $(KEYCLOAK_REPO_URL) $(NOK_KEYCLOAK_DIR) ;\
@@ -35,7 +35,7 @@ clone-keycloak-repo:
 	fi
 
 .PHONY: deploy-auth
-deploy-auth:
+deploy-auth: ## Deploy Keycloak, PostgreSQL, and OAuth2 Proxy
 	@echo "--> AUTH: Configure nok-portal-auth"
 
 	@$(KUBECTL) apply -f $(KEYCLOAK_DIR)/postgres-secret.yaml
@@ -56,7 +56,7 @@ deploy-auth:
 	@echo "--> AUTH: Deployment completed"
 
 .PHONY: portal-enable-keycloak
-portal-enable-keycloak:
+portal-enable-keycloak: ## Enable Keycloak in the NetOpsKube Portal
 	@echo "--> PORTAL: Enabling Keycloak menu"
 	@$(KUBECTL) get configmap nok-apps-menu-config -n nok-base -o json | \
 	jq '.data["menu-config.json"] |= (fromjson | .featured |= map(if .name == "Keycloak" then . + {"deployed":"yes"} else . end) | tojson)' | \
@@ -65,7 +65,7 @@ portal-enable-keycloak:
 
 
 .PHONY: annotate-auth-ingress-bng
-annotate-auth-ingress-bng:
+annotate-auth-ingress-bng: ## Configure OAuth authentication for the BNG ingress
 	@if [ "$(KEYCLOAK_ENABLED)" = "YES" ]; then \
 		if $(KUBECTL) get ingress nok-apps-ingress -n nok-bng >/dev/null 2>&1; then \
 			echo "--> AUTH: Updating nok-bng/nok-apps-ingress for OAuth probing"; \
@@ -88,7 +88,7 @@ annotate-auth-ingress-bng:
 
 
 .PHONY: annotate-auth-ingress-base
-annotate-auth-ingress-base:
+annotate-auth-ingress-base: ## Configure OAuth authentication for the Portal ingress
 	@if [ "$(KEYCLOAK_ENABLED)" = "YES" ]; then \
 		if $(KUBECTL) get ingress nok-apps-portal-ingress -n nok-base >/dev/null 2>&1; then \
 			echo "--> AUTH: Updating nok-base/nok-apps-portal-ingress for OAuth probing"; \
@@ -110,7 +110,7 @@ annotate-auth-ingress-base:
 	fi
 
 .PHONY: annotate-auth-ingress-dia
-annotate-auth-ingress-dia:
+annotate-auth-ingress-dia: ## Configure OAuth authentication for the DIA ingress
 	@if [ "$(KEYCLOAK_ENABLED)" = "YES" ]; then \
 		if $(KUBECTL) get ingress nok-apps-ingress -n nok-dia >/dev/null 2>&1; then \
 			echo "--> AUTH: Updating nok-dia/nok-apps-ingress for OAuth probing"; \
@@ -132,7 +132,7 @@ annotate-auth-ingress-dia:
 	fi
 
 .PHONY: annotate-auth-ingress-bbm
-annotate-auth-ingress-bbm:
+annotate-auth-ingress-bbm: ## Configure OAuth authentication for the BBM ingress
 	@if [ "$(KEYCLOAK_ENABLED)" = "YES" ]; then \
 		if $(KUBECTL) get ingress bbm-ingress -n nok-bbm >/dev/null 2>&1; then \
 			echo "--> AUTH: Updating nok-bbm/bbm-ingress for OAuth probing"; \
@@ -154,7 +154,7 @@ annotate-auth-ingress-bbm:
 	fi
 
 .PHONY: annotate-auth-ingress-gitea
-annotate-auth-ingress-gitea:
+annotate-auth-ingress-gitea: ## Configure OAuth authentication for the Gitea ingress
 	@if [ "$(KEYCLOAK_ENABLED)" = "YES" ]; then \
 		if $(KUBECTL) get ingress nok-gitea-ingress -n nok-git >/dev/null 2>&1; then \
 			echo "--> AUTH: Checking nok-git/nok-gitea-ingress OAuth annotation"; \
@@ -186,11 +186,11 @@ annotate-auth-ingress-gitea:
 
 ifeq ($(KEYCLOAK_ENABLED),YES)
 
-configure-auth: clone-keycloak-repo deploy-auth portal-enable-keycloak annotate-auth-ingress-base annotate-auth-ingress-bbm
+configure-auth: clone-keycloak-repo deploy-auth portal-enable-keycloak annotate-auth-ingress-base annotate-auth-ingress-bbm ## Configure authentication and Keycloak
 
 else
 
-configure-auth:
+configure-auth: ## Configure authentication and Keycloak
 	@echo "--> AUTH: Keycloak disabled. Skipping authentication deployment."
 
 endif
