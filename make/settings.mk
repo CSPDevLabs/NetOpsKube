@@ -105,7 +105,7 @@ SRSIM_LICENSE_FILE ?= $(NOK_CLABS_DIR)/$(NOK_CLAB)/srsim-lic-25.txt
 
 NOK_KPT_DIR ?= $(BASE)/nok-kpt
 KPT_REPO_URL ?= https://github.com/CSPDevLabs/kpt
-KPT_REPO_BRANCH ?= nok-restructure
+KPT_REPO_BRANCH ?= main
 
 NOK_CLABS_DIR ?= $(BASE)/nok-clabs
 CLABS_REPO_URL ?= https://github.com/CSPDevLabs/nok-clabs

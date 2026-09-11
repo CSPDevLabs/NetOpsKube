@@ -18,7 +18,7 @@
 FLUX_BNG_REPO ?= nok-bng-resources
 FLUX_BNG_SECRET ?= nok-bng-auth
 BNG_MANIFESTS_DIR := ./nok-clabs/nok-bng/nok-manifests
-BNG_REPO_URL := ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_BNG_REPO).git
+BNG_REPO_URL = ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_BNG_REPO).git
 
 .PHONY: try-nok-bng
 try-nok-bng: install-bng-pkg gitops-bng-kustomization portal-enable-bng annotate-auth-ingress-bng annotate-auth-ingress-gitea ## Deploy the BNG solution

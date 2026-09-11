@@ -200,7 +200,7 @@ git-clone-kpt: ## Clones the CSPDevLabs/kpt repository into ./nok-kpt
 git-clone-clab: ## Clones the CSPDevLabs/nok-clabs repository into ./nok-clabs
 	@echo "--> GIT: Cloning $(CLABS_REPO_URL) into $(NOK_CLABS_DIR)"
 	@if [ ! -d "$(NOK_CLABS_DIR)" ]; then \
-		git clone -b nok-restructure $(CLABS_REPO_URL) $(NOK_CLABS_DIR) ;\
+		git clone $(CLABS_REPO_URL) $(NOK_CLABS_DIR) ;\
 	else \
 		echo "--> GIT: $(NOK_CLABS_DIR) already exists. Skipping clone." ;\
 	fi

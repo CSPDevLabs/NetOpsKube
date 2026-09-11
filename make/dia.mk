@@ -20,8 +20,8 @@ FLUX_DIA_GRAFANA_REPO ?= grafana-dashboards
 FLUX_DIA_SECRET ?= nok-dia-auth
 DIA_MANIFESTS_DIR := ./nok-clabs/nok-dia/nok-manifests
 DIA_GRAFANA_DIR := ./nok-clabs/nok-dia/grafana-dashboards
-DIA_REPO_URL := ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_DIA_REPO).git
-DIA_GRAFANA_REPO_URL := ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_DIA_GRAFANA_REPO).git
+DIA_REPO_URL = ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_DIA_REPO).git
+DIA_GRAFANA_REPO_URL = ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_DIA_GRAFANA_REPO).git
 
 .PHONY: try-nok-dia
 try-nok-dia: install-dia-pkg gitops-dia-kustomization portal-enable-dia annotate-auth-ingress-dia annotate-auth-ingress-gitea  ## Deploy the DIA solution
