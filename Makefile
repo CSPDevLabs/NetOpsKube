@@ -1,93 +1,49 @@
-# --- Configuration Variables ---
-BASE ?= $(shell pwd)
-# i.e Darwin / Linux
-UNAME := $(shell uname)
-# Lowercase - sane version
-OS := $(shell echo "$(UNAME)" | tr '[:upper:]' '[:lower:]')
+# ==============================================================================
+# Deployment Flow
+# ==============================================================================
+#
+# The deployment is intentionally split into three phases:
+#
+#   1. make try-nok
+#      - Creates the KinD cluster.
+#      - Installs shared infrastructure (MetalLB, Prometheus Operator,
+#        GNMIc Operator, BBM, Flux, Gitea, authentication, etc.).
+#
+#   2. make try-nok-bng
+#      - Deploys the BNG solution and its GitOps resources.
+#
+#   3. make try-nok-dia
+#      - Deploys the DIA solution and its GitOps resources.
+#
+# IMPORTANT:
+# Both BNG and DIA install independent monitoring stacks (Prometheus,
+# Alertmanager, Grafana, ServiceMonitors, etc.) into their own namespaces.
+# Although the resources are namespaced, some supporting resources are
+# cluster-scoped (for example ClusterRoles, ClusterRoleBindings and CRDs
+# managed by the Prometheus Operator).
+#
+#
+# Expected usage:
+#
+#     make try-nok
+#     make try-nok-bng
+#     make try-nok-dia
+#
+# or
+#
+#     make try-nok
+#     make try-nok-dia
+#     make try-nok-bng
+#
+# Both sequences should result in functional BNG and DIA deployments.
+# ==============================================================================
 
-# Force bash on supported platforms only: macOS (Darwin), Ubuntu LTS, Rocky Linux.
-# Other systems keep Make's default SHELL (/bin/sh) to avoid silent assumptions!
-# Tested on Rocky Linux 9.7 and Ubuntu 24.04.4 LTS
-DISTRO_ID := $(shell . /etc/os-release 2>/dev/null && echo $$ID)
-ifeq ($(UNAME),Darwin)
-SHELL := /bin/bash
-else ifeq ($(DISTRO_ID),ubuntu)
-SHELL := /bin/bash
-else ifeq ($(DISTRO_ID),rocky)
-SHELL := /bin/bash
-endif
 
-ARCH_QUERY := $(shell uname -m)
-ifeq ($(ARCH_QUERY), x86_64)
-	ARCH := amd64
-else ifeq ($(ARCH_QUERY),$(filter $(ARCH_QUERY), arm64 aarch64))
-	ARCH := arm64
-else
-	ARCH := $(ARCH_QUERY)
-endif
-
-
-KIND_CLUSTER_NAME ?= nok-demo
-KIND_CONFIG_REAL_LOC ?= build/kind-cluster.yaml
-KIND_LAUNCH_CONFIG ?= /tmp/kind-config-$(KIND_CLUSTER_NAME).yaml
-# KinD Docker network prefix (e.g. 172.18.0). LB IPs are written into nok-kpt
-# apply-setters.yaml before package install (CSPDevLabs/kpt#27).
-KIND_LB_DEFAULT_PREFIX ?= 172.18.0
-KIND_NET_PREFIX = $(shell docker inspect \
-	-f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' \
-	$(KIND_CLUSTER_NAME)-control-plane 2>/dev/null | \
-	awk -F. '{print $$1 "." $$2 "." $$3}')
-
-# Host octets for LoadBalancer services on the KinD Docker /24 (kpt#27 setters).
-KIND_LB_INGRESS_HOST ?= 100
-KIND_LB_BNG_SYSLOG_HOST ?= 101
-KIND_LB_GITEA_SSH_HOST ?= 102
-KIND_LB_DIA_SYSLOG_HOST ?= 103
-KIND_LB_BLACKBOX_HOST ?= 111
-KIND_LB_POOL_START ?= 100
-KIND_LB_POOL_END ?= 120
-
-# Optional: Set API server address if you need to access it from outside Docker
-# KIND_API_SERVER_ADDRESS ?= 127.0.0.1
-
-# Optional: Set to 'yes' to disable host port mappings, otherwise 'no'
-NO_HOST_PORT_MAPPINGS ?= no
-EXT_HTTPS_PORT ?= 5443 # Port to map for external HTTPS access if NO_HOST_PORT_MAPPINGS is 'no'
-
-# Optional: Set to 'YES' to onboard Keycloak, otherwise 'NO'
-KEYCLOAK_ENABLED ?= NO
-
-# --- Tool Paths (now managed by Makefile) ---
-TOOLS ?= $(BASE)/tools
-KIND ?= $(TOOLS)/kind
-KUBECTL ?= $(TOOLS)/kubectl
-YQ ?= $(TOOLS)/yq
-HELM ?= $(TOOLS)/helm
-KPT ?= $(TOOLS)/kpt
-K9S ?= $(TOOLS)/k9s
-GH ?= $(TOOLS)/gh
-CLAB ?= $(TOOLS)/clab
-FLUX ?= $(TOOLS)/flux
-
-# --- Sub-Makefiles ---
-# Troubleshooting / day-2 ops targets live in their own file to keep this
-# Makefile focused on install + deploy. See docs/TROUBLESHOOTING.md.
+include make/settings.mk
 include make/troubleshoot.mk
-
-
-# --- Proxy Settings ---
-# Make sure environment variables are set before using them `export HTTP_PROXY=...`
-# Proxy settings: inherited from the shell. Set HTTP_PROXY / HTTPS_PROXY /
-# NO_PROXY in your environment before running the Makefile.
-export HTTP_PROXY ?=
-export HTTPS_PROXY ?=
-# NO_PROXY_LOOPBACK := 127.0.0.1,localhost,::1
-# NO_PROXY_RFC1918  := 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,10.96.0.0/12,10.244.0.0/16
-# NO_PROXY_SUFFIXES := .nok.local,.svc,.svc.cluster.local
-# NO_PROXY_SHORT    := gitea.nok.local,bbm-grafana-svc,bbm-grafana-svc.nok-bbm,bbm-grafana-svc.nok-bbm.svc,bbm-grafana-svc.nok-bbm.svc.cluster.local,bbm-prometheus-svc,bbm-prometheus-svc.nok-bbm,bbm-prometheus-svc.nok-bbm.svc,bbm-prometheus-svc.nok-bbm.svc.cluster.local
-# NO_PROXY := $(NO_PROXY_LOOPBACK),$(NO_PROXY_RFC1918),$(NO_PROXY_SUFFIXES),$(NO_PROXY_SHORT)
-export NO_PROXY := 127.0.0.1,localhost,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,10.96.0.0/12,10.244.0.0/16,gitea.nok.local,.nok.local,.svc,.svc.cluster.local,bbm-grafana-svc,bbm-grafana-svc.nok-bbm,bbm-grafana-svc.nok-bbm.svc,bbm-grafana-svc.nok-bbm.svc.cluster.local,bbm-prometheus-svc,bbm-prometheus-svc.nok-bbm,bbm-prometheus-svc.nok-bbm.svc,bbm-prometheus-svc.nok-bbm.svc.cluster.local
-
+include make/bng.mk
+include make/dia.mk
+include make/auth.mk
 
 # Deployments (namespace:name) that receive proxy env via set-proxy-env / unset-proxy-env.
 PROXY_DEPLOYMENTS := \
@@ -98,187 +54,22 @@ nok-base:config-server
 
 ifneq ($(filter YES yes Yes,$(KEYCLOAK_ENABLED)),)
 PROXY_DEPLOYMENTS += \
-	nok-bng:oauth2-proxy
+	nok-base:oauth2-proxy
 endif
-
-# --- Git Repository Configuration ---
-# Define the SROS image and license file for the BNG deployment
-SRLINUX_IMAGE ?= registry.srlinux.dev/pub/nokia_srsim:25.10.R1
-SRSIM_LICENSE_FILE ?= $(NOK_CLABS_DIR)/nok-bng/srsim-lic-25.txt
-
-NOK_KPT_DIR ?= $(BASE)/nok-kpt
-KPT_REPO_URL ?= https://github.com/CSPDevLabs/kpt
-KPT_REPO_BRANCH ?= feat/ip-setters
-
-NOK_CLABS_DIR ?= $(BASE)/nok-clabs
-CLABS_REPO_URL ?= https://github.com/CSPDevLabs/nok-clabs
-
-NOK_KEYCLOAK_DIR ?= $(BASE)/nok-portal-auth
-KEYCLOAK_REPO_URL ?= https://github.com/CSPDevLabs/nok-portal-auth
-KEYCLOAK_REPO_BRANCH ?= keycloak
-KEYCLOAK_DIR ?= $(BASE)/nok-portal-auth/keycloak
-OAUTH2_PROXY_DIR  ?= $(BASE)/nok-portal-auth/oauth2-proxy
-
-# Internal helper for output indentation
-INDENT_OUT ?= sed 's/^/    /'
-### Curl options:
-CURL := curl --silent --fail --show-error
-
-## Tools versions
-### ---------------------------------------------------------------------------|
-GH_VERSION ?= 2.67.0
-HELM_VERSION ?= v3.17.0
-KIND_VERSION ?= v0.29.0
-KPT_VERSION ?= v1.0.0-beta.57
-KUBECTL_VERSION ?= v1.33.1
-K9S_VERSION ?= v0.32.4
-YQ_VERSION ?= v4.42.1
-CLAB_VERSION ?= 0.72.0
-FLUX_VERSION ?= 2.3.0
-
-### Tool Locations
-### ---------------------------------------------------------------------------|
-KIND_SRC ?= https://kind.sigs.k8s.io/dl/$(KIND_VERSION)/kind-$(OS)-$(ARCH)
-KUBECTL_SRC ?= https://dl.k8s.io/release/$(KUBECTL_VERSION)/bin/$(OS)/$(ARCH)/kubectl
-HELM_SRC ?= https://get.helm.sh/helm-$(HELM_VERSION)-$(OS)-$(ARCH).tar.gz
-KPT_SRC ?= https://github.com/GoogleContainerTools/kpt/releases/download/$(KPT_VERSION)/kpt_$(OS)_$(ARCH)
-K9S_SRC ?= https://github.com/derailed/k9s/releases/download/$(K9S_VERSION)/k9s_$(UNAME)_$(ARCH).tar.gz
-YQ_SRC ?= https://github.com/mikefarah/yq/releases/download/$(YQ_VERSION)/yq_$(OS)_$(ARCH)
-CLAB_SRC ?= https://github.com/srl-labs/containerlab/releases/download/v$(CLAB_VERSION)/containerlab_$(CLAB_VERSION)_$(OS)_$(ARCH).tar.gz
-FLUX_SRC ?= https://github.com/fluxcd/flux2/releases/download/v$(FLUX_VERSION)/flux_$(FLUX_VERSION)_$(OS)_$(ARCH).tar.gz
-
-# GH_SRC needs special handling for OS/ARCH mapping
-ifeq ($(OS),darwin)
-    GH_OS_ARCH := macOS_$(ARCH)
-    GH_EXT := zip
-else
-    GH_OS_ARCH := $(OS)_$(ARCH)
-    GH_EXT := tar.gz
-endif
-GH_SRC ?= https://github.com/cli/cli/releases/download/v$(GH_VERSION)/gh_$(GH_VERSION)_$(GH_OS_ARCH).$(GH_EXT)
-
-DOWNLOAD_TOOLS_LIST := $(KIND) $(KUBECTL) $(HELM) $(KPT) $(K9S) $(YQ) $(GH) $(CLAB) $(FLUX)
-
-# --- Flux & Gitea GitOps Configuration ---
-GITOPS_NAMESPACE ?= nok-git
-GITEA_HOST ?= bng.nok.local
-GITEA_HTTP_PATH ?= /gitea
-GITEA_IP = $(KIND_NET_PREFIX).$(KIND_LB_INGRESS_HOST)
-GITEA_SSH_HOST = $(KIND_NET_PREFIX).$(KIND_LB_GITEA_SSH_HOST)
-GITEA_ADMIN_USER ?= nok
-GITEA_ADMIN_PASS ?= N0kP4ssw0rd
-GITEA_ADMIN_EMAIL ?= nok@example.com
-
-FLUX_GIT_REPO ?= flux-bootstrap
-FLUX_GIT_BRANCH ?= main
-FLUX_CLUSTER_PATH ?= clusters/NetOpsKube
-FLUX_SSH_KEY ?= $(HOME)/.ssh/flux_ed25519
-
-## use cases
-FLUX_BNG_REPO ?= nok-bng-resources
-FLUX_BNG_SECRET ?= nok-bng-auth
-BNG_MANIFESTS_DIR := ./nok-clabs/nok-bng/nok-manifests
-BNG_REPO_URL = ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_BNG_REPO).git
-
-FLUX_DIA_REPO ?= nok-dia-resources
-FLUX_DIA_GRAFANA_REPO ?= grafana-dashboards
-FLUX_DIA_SECRET ?= nok-dia-auth
-DIA_MANIFESTS_DIR := ./nok-clabs/nok-dia/nok-manifests
-DIA_GRAFANA_DIR := ./nok-clabs/nok-dia/grafana-dashboards
-DIA_REPO_URL = ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_DIA_REPO).git
-DIA_GRAFANA_REPO_URL = ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_DIA_GRAFANA_REPO).git
-
-define GET_GITEA_POD
-$(shell $(KUBECTL) get pods -n $(GITOPS_NAMESPACE) \
-  -l app.kubernetes.io/name=gitea \
-  -o jsonpath='{.items[0].metadata.name}')
-endef
-
-# --- Macros for tool downloading ---
-define download-bin
-    $(info --> INFO: Downloading $(2))
-	if test ! -f $(1); then $(CURL) -Lo $(1) $(2) >/dev/null && chmod a+x $(1); fi
-endef
-
-define download-bin-from-archive
-	$(info --> INFO: Downloading $(2))
-	if test ! -f $(1); then $(CURL) -L --output - $(2) | tar -x$(5) $(if $(6),--strip-components $(6)) -C $(3) $(4) >/dev/null && chmod a+x $(1); fi
-endef
-
-KPT_LIVE_INIT_FORCE ?= 0 # Set to 1 to force re-initialization of kpt packages
-
-define INSTALL_KPT_PACKAGE
-	{	\
-		echo -e "--> INSTALL: [\033[1;34m$2\033[0m] - Applying kpt package"									;\
-		pushd $1 &>/dev/null || (echo "[ERROR]: Failed to switch cwd to $2" && exit 1)						;\
-		if [[ ! -f resourcegroup.yaml ]] || [[ $(KPT_LIVE_INIT_FORCE) -eq 1 ]]; then						 \
-			$(KPT) live init --force 2>&1 | $(INDENT_OUT)													;\
-		else																								 \
-			echo -e "--> INSTALL: [\033[1;34m$2\033[0m] - Resource group found, don't re-init this package"	;\
-		fi																									;\
-		$(KPT) live apply $3 $4 2>&1 | $(INDENT_OUT)                                                   		;\
-		popd &>/dev/null || (echo "[ERROR]: Failed to switch back from $2" && exit 1)						;\
-		echo -e "--> INSTALL: [\033[0;32m$2\033[0m] - Applied and reconciled package"						;\
-	}
-endef
-
-# Runs kpt fn render (pipeline apply-setters.yaml) then kpt live apply.
-# LB IPs must be written first via update-kpt-lb-setters.
-define INSTALL_KPT_PACKAGE_WITH_SETTERS
-	{	\
-		echo -e "--> INSTALL: [\033[1;34m$2\033[0m] - Applying kpt package"									;\
-		pushd $1 &>/dev/null || (echo "[ERROR]: Failed to switch cwd to $2" && exit 1)						;\
-		if [[ ! -f resourcegroup.yaml ]] || [[ $(KPT_LIVE_INIT_FORCE) -eq 1 ]]; then						 \
-			$(KPT) live init --force 2>&1 | $(INDENT_OUT)													;\
-		else																								 \
-			echo -e "--> INSTALL: [\033[1;34m$2\033[0m] - Resource group found, don't re-init this package"	;\
-		fi																									;\
-		$(KPT) fn render 2>&1 | $(INDENT_OUT)																;\
-		$(KPT) live apply $3 $4 2>&1 | $(INDENT_OUT)                                                   		;\
-		popd &>/dev/null || (echo "[ERROR]: Failed to switch back from $2" && exit 1)						;\
-		echo -e "--> INSTALL: [\033[0;32m$2\033[0m] - Applied and reconciled package"						;\
-	}
-endef
-
-.PHONY: os-shell 
-os-shell: ## Verify the OS, ARCH, SHELL, DISTRO_ID, and ARCH_QUERY, output as JSON
-	@echo "{"
-	@echo "    \"OS\": \"$(OS)\","
-	@echo "    \"UNAME\": \"$(UNAME)\","
-	@echo "    \"ARCH\": \"$(ARCH)\","
-	@echo "    \"SHELL\": \"$(SHELL)\","
-	@echo "    \"DISTRO_ID\": \"$(DISTRO_ID)\","
-	@echo "    \"ARCH_QUERY\": \"$(ARCH_QUERY)\""
-	@echo "}"
-
-.PHONY: proxy-env
-proxy-env: ## Verify proxy environment variables are set
-	@echo "{"
-	@echo "    \"HTTP_PROXY\": \"$(HTTP_PROXY)\","
-	@echo "    \"HTTPS_PROXY\": \"$(HTTPS_PROXY)\","
-	@echo "    \"NO_PROXY\": \"$(NO_PROXY)\""
-	@echo "}"
 
 .PHONY: try-nok
-try-nok: check-tools git-clone-kpt apply-kpt-overlays git-clone-clab cluster-up install-base-pkg install-lb-pkg install-prom-oper install-gnmic-oper start-ingress-port-forward install-bbm-pkg ## Deploy Base Apps, clone kpt and clab repos, install base packages / load balancer / prometheus and gnmic operators, port forward
-
-.PHONY: try-nok-bng
-try-nok-bng: try-nok install-bng-pkg install-git-pkg configure-auth gitops-init gitops-bng-kustomization ## Deploy BNG and GitOps
-
-.PHONY: try-nok-dia
-try-nok-dia: try-nok install-dia-pkg install-git-pkg configure-auth gitops-init gitops-dia-kustomization ## Deploy BNG and GitOps
+try-nok: check-tools cluster-up cluster-wait-for-node-ready generate-portal-pv git-clone-clab install-base-pkg install-lb-pkg install-prom-oper install-gnmic-oper start-ingress-port-forward install-bbm-pkg install-base-final install-git-pkg gitops-init configure-auth ## Deploy Base Apps, clone kpt and clab repos, install base packages / load balancer / prometheus and gnmic operators
 
 .PHONY: gitops-init
-gitops-init: gitea-create-admin gitea-create-flux-repo gitea-add-ssh-key  flux-bootstrap ## Create Gitea admin, create Flux repo, add SSH key, bootstrap Flux
+gitops-init: gitea-create-admin gitea-create-flux-repo gitea-add-ssh-key flux-bootstrap ## Create Gitea admin, create Flux repo, add SSH key, bootstrap Flux
 	@echo "--> GITOPS: Cluster is now managed by Flux"
 
-.PHONY: gitops-bng-kustomization
-gitops-bng-kustomization: gitea-create-bng-repo flux-create-bng-secret flux-create-bng-source push-bng-manifests create-bng-kustomizations
-	@echo "--> GITOPS: BNG repo in sync by Flux"
-
-.PHONY: gitops-dia-kustomization
-gitops-dia-kustomization: gitea-create-dia-repo gitea-create-dia-grafana-repo flux-create-dia-secret flux-create-dia-source push-dia-manifests push-dia-manifests push-dia-grafana create-dia-kustomizations
-	@echo "--> GITOPS: DIA repo in sync by Flux"
+.PHONY: generate-portal-pv
+generate-portal-pv: ## Synchronize portal files into the KinD control-plane node
+	@echo "--> PORTAL: Syncing portal files into Kind node"
+	@docker exec $(KIND_CLUSTER_NAME)-control-plane rm -rf /portal
+	@docker cp $(NOK_KPT_DIR)/nok-base/portal $(KIND_CLUSTER_NAME)-control-plane:/portal
+	@echo "--> PORTAL: Portal files synchronized"
 
 .PHONY: apply-kpt-overlays
 apply-kpt-overlays: ## Apply NetOpsKube overlays on top of cloned nok-kpt packages
@@ -334,7 +125,7 @@ cluster-up: $(KIND_CONFIG_REAL_LOC) ## Bring up the KinD cluster
 	@$(MAKE) update-kpt-lb-setters
 
 .PHONY: update-kpt-lb-setters
-update-kpt-lb-setters: $(YQ) ## Write KinD LB IPs into nok-kpt apply-setters.yaml (kpt#27)
+update-kpt-lb-setters: git-clone-kpt $(YQ) ## Write KinD LB IPs into nok-kpt apply-setters.yaml (kpt#27)
 	@IP_PREFIX="$(KIND_NET_PREFIX)" ;\
 	if [ -z "$$IP_PREFIX" ]; then \
 		echo "Error: KinD cluster '$(KIND_CLUSTER_NAME)' not found — cannot detect network prefix" ;\
@@ -413,50 +204,12 @@ create-tool-aliases: $(TOOLS) ## Create aliases for versioned binaries in the to
 help: ## Display this help message
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-25s\033[0m %s\n", $$1, $$2}'
 
-# --- Tool Download Rules ---
-$(KIND): | $(BASE) $(TOOLS) ; $(info --> TOOLS: Ensuring kind is present in $(KIND))
-	@$(call download-bin,$(KIND),$(KIND_SRC))
-
-$(KUBECTL): | $(BASE) $(TOOLS) ; $(info --> TOOLS: Ensuring kubectl is present in $(KUBECTL))
-	@$(call download-bin,$(KUBECTL),$(KUBECTL_SRC))
-
-$(HELM): | $(BASE) $(TOOLS) ; $(info --> TOOLS: Ensuring helm is present in $(HELM))
-	@$(call download-bin-from-archive,$(HELM),$(HELM_SRC),$(TOOLS),$(OS)-$(ARCH)/helm,z,1)
-
-$(KPT): | $(BASE) $(TOOLS) ; $(info --> TOOLS: Ensuring kpt is present in $(KPT))
-	@$(call download-bin,$(KPT),$(KPT_SRC))
-
-$(K9S): | $(BASE) $(TOOLS) ; $(info --> TOOLS: Ensuring k9s is present in $(K9S))
-	@$(call download-bin-from-archive,$(K9S),$(K9S_SRC),$(TOOLS),k9s,z)
-
-$(YQ): | $(BASE) $(TOOLS) ; $(info --> TOOLS: Ensuring yq is present in $(YQ))
-	@$(call download-bin,$(YQ),$(YQ_SRC))
-
-$(GH): | $(BASE) $(TOOLS) ; $(info --> TOOLS: Ensuring gh is present in $(GH))
-	@$(call download-bin-from-archive,$(GH),$(GH_SRC),$(TOOLS),gh_$(GH_VERSION)_$(GH_OS_ARCH)/bin/gh,z,2)
-
-$(CLAB): | $(BASE) $(TOOLS) ; $(info --> TOOLS: Ensuring containerlab is present in $(CLAB))
-	@if test ! -f $(CLAB); then \
-		echo "    Downloading $(CLAB_SRC)..." ;\
-		TEMP_DIR=$$(mktemp -d) ;\
-		$(CURL) -L --output - $(CLAB_SRC) | tar -xz -C $$TEMP_DIR >/dev/null ;\
-		mv $$TEMP_DIR/containerlab $(CLAB) ;\
-		chmod a+x $(CLAB) ;\
-		rm -rf $$TEMP_DIR ;\
-	fi
-$(FLUX): | $(BASE) $(TOOLS) ; $(info --> TOOLS: Ensuring flux is present in $(FLUX))
-	@if test ! -f $(FLUX); then \
-		echo "    Downloading $(FLUX_SRC)..." ;\
-		TEMP_DIR=$$(mktemp -d) ;\
-		$(CURL) -L --output - $(FLUX_SRC) | tar -xz -C $$TEMP_DIR >/dev/null ;\
-		mv $$TEMP_DIR/flux $(FLUX) ;\
-		chmod a+x $(FLUX) ;\
-		rm -rf $$TEMP_DIR ;\
-	fi	
+	
 
 # --- Git Clone Targets ---
+
 .PHONY: git-clone-kpt
-git-clone-kpt: ## Clones the CSPDevLabs/kpt repository into ./nok-kpt (branch: feat/ip-setters)
+git-clone-kpt: ## Clones the CSPDevLabs/kpt repository into ./nok-kpt
 	@echo "--> GIT: Cloning $(KPT_REPO_URL) ($(KPT_REPO_BRANCH)) into $(NOK_KPT_DIR)"
 	@if [ ! -d "$(NOK_KPT_DIR)" ]; then \
 		git clone -b $(KPT_REPO_BRANCH) $(KPT_REPO_URL) $(NOK_KPT_DIR) ;\
@@ -491,50 +244,6 @@ check-clab-prerequisites: ## Checks for required Docker image and SROS license f
 		fi ;\
 		echo "--> CLAB: Nokia SROS license file found." ;\
 	}
-
-
-
-.PHONY: deploy-clab-bng
-deploy-clab-bng: check-tools git-clone-clab check-clab-prerequisites ## Deploys the Containerlab BNG topology
-	@echo "--> CLAB: Deploying BNG topology from $(NOK_CLABS_DIR)/nok-bng"
-	@if [ -d "$(NOK_CLABS_DIR)/nok-bng" ]; then \
-		cd $(NOK_CLABS_DIR)/nok-bng && $(CLAB) deploy -t topo.yaml ;\
-	else \
-		echo "Error: $(NOK_CLABS_DIR)/nok-bng directory not found. Please ensure the nok-clabs repository is cloned and contains the nok-bng subdirectory." ;\
-		exit 1 ;\
-	fi
-
-.PHONY: deploy-clab-dia
-deploy-clab-dia: check-tools git-clone-clab check-clab-prerequisites ## Deploys the Containerlab DIA topology
-	@echo "--> CLAB: Deploying DIA topology from $(NOK_CLABS_DIR)/nok-dia"
-	@if [ -d "$(NOK_CLABS_DIR)/nok-dia" ]; then \
-		cd $(NOK_CLABS_DIR)/nok-dia && $(CLAB) deploy -t topo.yaml ;\
-	else \
-		echo "Error: $(NOK_CLABS_DIR)/nok-dia directory not found. Please ensure the nok-clabs repository is cloned and contains the nok-dia subdirectory." ;\
-		exit 1 ;\
-	fi
-
-
-.PHONY: destroy-clab-bng
-destroy-clab-bng: check-tools git-clone-clab ## Destroys the Containerlab BNG topology and cleans up
-	@echo "--> CLAB: Destroying BNG topology from $(NOK_CLABS_DIR)/nok-bng"
-	@if [ -d "$(NOK_CLABS_DIR)/nok-bng" ]; then \
-		cd $(NOK_CLABS_DIR)/nok-bng && $(CLAB) destroy --cleanup -t topo.yaml ;\
-	else \
-		echo "Error: $(NOK_CLABS_DIR)/nok-bng directory not found. Please ensure the nok-clabs repository is cloned and contains the nok-bng subdirectory." ;\
-		exit 1 ;\
-	fi	
-
-
-.PHONY: destroy-clab-dia
-destroy-clab-dia: check-tools git-clone-clab ## Destroys the Containerlab DIA topology and cleans up
-	@echo "--> CLAB: Destroying DIA topology from $(NOK_CLABS_DIR)/nok-dia"
-	@if [ -d "$(NOK_CLABS_DIR)/nok-dia" ]; then \
-		cd $(NOK_CLABS_DIR)/nok-dia && $(CLAB) destroy --cleanup -t topo.yaml ;\
-	else \
-		echo "Error: $(NOK_CLABS_DIR)/nok-dia directory not found. Please ensure the nok-clabs repository is cloned and contains the nok-dia subdirectory." ;\
-		exit 1 ;\
-	fi	
 
 
 # --- Directory Creation Rules ---
@@ -600,35 +309,44 @@ start-ingress-port-forward: ## Starts background port-forward for ingress-nginx-
 install-base-pkg: update-kpt-lb-setters ## Installs the base kpt package from ./nok-kpt/nok-base
 	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-base,nok-base,"--reconcile-timeout=5m", "--inventory-policy=adopt")	
 
-.PHONY: install-bbm-pkg
-install-bbm-pkg: ## Installs the BBM (self-monitotoring and observability) kpt package from ./nok-kpt/nok-bbm
-	@echo "--> INSTALL: [\033[1;34mBBM\033[0m] - Applying kpt package with setters"
-	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-bbm,nok-bbm,"--reconcile-timeout=5m", "--inventory-policy=adopt")	
+.PHONY: install-base-final
+install-base-final: update-kpt-lb-setters
+	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-base,nok-base,"--reconcile-timeout=5m", "--inventory-policy=adopt")	
+
+.PHONY: install-git-pkg
+install-git-pkg: install-lb-pkg ## Installs the base kpt package from ./nok-kpt/nok-git
+	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-git,nok-git,"--reconcile-timeout=5m", "--inventory-policy=adopt")
+
+.PHONY: install-lb-pkg
+install-lb-pkg: wait-for-metallb-ready ## Installs the base kpt package from ./nok-kpt/nok-lb
+	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-lb,nok-lb,"--reconcile-timeout=5m", "")		
 
 .PHONY: wait-for-metallb-ready
 wait-for-metallb-ready: ## Wait for the Kubernetes Metallb node to be ready
 	@echo "--> KIND: Waiting for Metallb Controller to be ready"
 	@{ \
 		START=$$(date +%s) ; \
-		$(KUBECTL) wait --for=condition=available deployment/controller -n metallb-system --timeout=5m --timeout=5m ; \
+		$(KUBECTL) wait --for=condition=available deployment/controller -n metallb-system --timeout=5m ; \
 		echo "--> KIND: Node ready check took $$(( $$(date +%s) - $$START ))s" ; \
-	}
+	}	
 
-.PHONY: install-lb-pkg
-install-lb-pkg: check-tools git-clone-kpt install-base-pkg wait-for-metallb-ready ## Installs the base kpt package from ./nok-kpt/nok-lb
-	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-lb,nok-lb,"--reconcile-timeout=5m", "")		
+.PHONY: install-bbm-pkg
+install-bbm-pkg: ## Installs the BBM (self-monitoring and observability) kpt package from ./nok-kpt/nok-bbm
+	@echo "--> INSTALL: [\033[1;34mBBM\033[0m] - Applying kpt package with setters"
+	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-bbm,nok-bbm,"--reconcile-timeout=5m", "--inventory-policy=adopt")
 
-.PHONY: install-bng-pkg
-install-bng-pkg: check-tools git-clone-kpt install-base-pkg install-lb-pkg ## Installs the base kpt package from ./nok-kpt/nok-bng
-	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-bng,nok-bng,"--reconcile-timeout=5m", "--inventory-policy=adopt")		
-
-.PHONY: install-dia-pkg
-install-dia-pkg: check-tools git-clone-kpt install-base-pkg install-lb-pkg ## Installs the base kpt package from ./nok-kpt/nok-dia
-	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-dia,nok-dia,"--reconcile-timeout=5m", "--inventory-policy=adopt")
-
-.PHONY: install-git-pkg
-install-git-pkg: check-tools git-clone-kpt install-base-pkg install-lb-pkg ## Installs the base kpt package from ./nok-kpt/nok-git
-	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-git,nok-git,"--reconcile-timeout=5m", "--inventory-policy=adopt")	
+.PHONY: install-mcp-bng-pkg
+install-mcp-bng-pkg: ## Installs the MCP controller kpt package from ./nok-kpt/nok-base-mcp-bng
+	@echo -e "--> INSTALL: [\033[1;34mMCP BNG\033[0m] - Checking prerequisites..."
+	@if ! $(KUBECTL) version --client &>/dev/null; then \
+		echo "[ERROR]: kubectl is not working or not configured. Please ensure your kubeconfig is set." >&2; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(NOK_KPT_DIR)/nok-base-mcp-bng/Kptfile" ]; then \
+		echo "[ERROR]: MCP BNG kpt package not found at $(NOK_KPT_DIR)/nok-base-mcp-bng" >&2; \
+		exit 1; \
+	fi
+	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-base-mcp-bng,nok-base-mcp-bng,"--reconcile-timeout=5m", "--inventory-policy=adopt")
 
 
 .PHONY: install-prom-oper
@@ -662,7 +380,7 @@ install-gnmic-oper: $(KUBECTL) ## Installs the GNMIc Operator manifest
 	@echo -e "--> INSTALL: [\033[0;32mGNMIc Operator\033[0m] - Manifest applied successfully."
 
 .PHONY: gitea-create-admin
-gitea-create-admin:
+gitea-create-admin: ## Create the Gitea administrator user
 	@echo "--> GITEA: Ensuring admin user exists"
 	@POD="$(call GET_GITEA_POD)" ;\
 	if [ -z "$$POD" ]; then \
@@ -682,7 +400,7 @@ gitea-create-admin:
 	fi
 
 .PHONY: gitea-create-flux-repo
-gitea-create-flux-repo:
+gitea-create-flux-repo: ## Create the Flux Git repository in Gitea
 	@echo "--> GITEA: Waiting for API to become available (max 3 minutes)"
 	@set -e; \
 	timeout=180; \
@@ -719,7 +437,7 @@ gitea-create-flux-repo:
 
 
 .PHONY: gitea-add-ssh-key
-gitea-add-ssh-key:
+gitea-add-ssh-key: ## Add SSH key to Gitea
 	@set -e; \
 	echo "--> GITEA: Ensuring SSH key is registered"; \
 	\
@@ -762,7 +480,7 @@ gitea-add-ssh-key:
 	ssh -T -i "$(FLUX_SSH_KEY)" -o BatchMode=yes -o ConnectTimeout=5 git@"$(GITEA_SSH_HOST)" || true
 
 .PHONY: flux-bootstrap
-flux-bootstrap: check-tools gitea-create-admin gitea-create-flux-repo gitea-add-ssh-key
+flux-bootstrap: check-tools gitea-create-admin gitea-create-flux-repo gitea-add-ssh-key ## Bootstrap Flux using the Gitea Git repository
 	@echo "--> GITEA: Ensuring repository $(FLUX_GIT_REPO) exists"
 	@$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
 	  http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/repos/$(GITEA_ADMIN_USER)/$(FLUX_GIT_REPO) \
@@ -782,274 +500,21 @@ flux-bootstrap: check-tools gitea-create-admin gitea-create-flux-repo gitea-add-
 	  --private-key-file=$(FLUX_SSH_KEY) \
 	  --ssh-key-algorithm=ed25519 \
 	  --silent \
-	  --verbose
-
-.PHONY: gitea-create-bng-repo
-gitea-create-bng-repo:
-	@echo "--> GITEA: Ensuring repo $(FLUX_BNG_REPO) exists"
-	@$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) \
-	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
-	  http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/repos/$(GITEA_ADMIN_USER)/$(FLUX_BNG_REPO) \
-	  >/dev/null || \
-	$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) \
-	  -X POST \
-	  -H "Content-Type: application/json" \
-	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
-	  -d '{"name":"$(FLUX_BNG_REPO)", "description": "BNG resources for Network Observability and Conf Management","private":false,"auto_init":true}' \
-	  http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/user/repos
-
-.PHONY: gitea-create-dia-repo
-gitea-create-dia-repo:
-	@echo "--> GITEA: Ensuring repo $(FLUX_DIA_REPO) exists"
-	@$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) \
-	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
-	  http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/repos/$(GITEA_ADMIN_USER)/$(FLUX_DIA_REPO) \
-	  >/dev/null || \
-	$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) \
-	  -X POST \
-	  -H "Content-Type: application/json" \
-	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
-	  -d '{"name":"$(FLUX_DIA_REPO)", "description": "DIA resources for Network Observability and Conf Management","private":false,"auto_init":true}' \
-	  http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/user/repos
-
-
-.PHONY: gitea-create-dia-grafana-repo
-gitea-create-dia-grafana-repo:
-	@echo "--> GITEA: Ensuring repo $(FLUX_DIA_GRAFANA_REPO) exists"
-	@$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) \
-	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
-	  http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/repos/$(GITEA_ADMIN_USER)/$(FLUX_DIA_GRAFANA_REPO) \
-	  >/dev/null || \
-	$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) \
-	  -X POST \
-	  -H "Content-Type: application/json" \
-	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
-	  -d '{"name":"$(FLUX_DIA_GRAFANA_REPO)", "description": "NetOpsKube DIA Grafana Dashboards","private":false,"auto_init":true}' \
-	  http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/user/repos
-
-
-.PHONY: flux-create-bng-secret
-flux-create-bng-secret:
-	@echo "--> FLUX: Ensuring Git secret $(FLUX_BNG_SECRET) exists"
-	@if ! $(KUBECTL) get secret $(FLUX_BNG_SECRET) -n flux-system > /dev/null 2>&1; then \
-		echo "Creating Git secret $(FLUX_BNG_SECRET)..."; \
-		$(FLUX) create secret git $(FLUX_BNG_SECRET) \
-		  --url=ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_BNG_REPO).git \
-		  --ssh-key-algorithm=ed25519 \
-		  --private-key-file=$(FLUX_SSH_KEY) \
-		  --namespace=flux-system; \
-	else \
-		echo "Git secret $(FLUX_BNG_SECRET) already exists."; \
-	fi
-
-.PHONY: flux-create-dia-secret
-flux-create-dia-secret:
-	@echo "--> FLUX: Ensuring Git secret $(FLUX_DIA_SECRET) exists"
-	@if ! $(KUBECTL) get secret $(FLUX_DIA_SECRET) -n flux-system > /dev/null 2>&1; then \
-		echo "Creating Git secret $(FLUX_DIA_SECRET)..."; \
-		$(FLUX) create secret git $(FLUX_DIA_SECRET) \
-		  --url=ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_DIA_REPO).git \
-		  --ssh-key-algorithm=ed25519 \
-		  --private-key-file=$(FLUX_SSH_KEY) \
-		  --namespace=flux-system; \
-	else \
-		echo "Git secret $(FLUX_DIA_SECRET) already exists."; \
-	fi
-
-
-.PHONY: flux-create-bng-source
-flux-create-bng-source:
-	@echo "--> FLUX: Ensuring GitRepository source $(FLUX_BNG_REPO) exists"
-	@if ! $(KUBECTL) get gitrepository $(FLUX_BNG_REPO) -n flux-system > /dev/null 2>&1; then \
-		echo "Creating GitRepository source $(FLUX_BNG_REPO)..."; \
-		$(FLUX) create source git $(FLUX_BNG_REPO) \
-		  --url=ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_BNG_REPO).git \
-		  --branch=$(FLUX_GIT_BRANCH) \
-		  --secret-ref=$(FLUX_BNG_SECRET) \
-		  --interval=1m \
-		  --namespace=flux-system; \
-	else \
-		echo "GitRepository source $(FLUX_BNG_REPO) already exists."; \
-	fi	  
-
-
-.PHONY: flux-create-dia-source
-flux-create-dia-source:
-	@echo "--> FLUX: Ensuring GitRepository source $(FLUX_DIA_REPO) exists"
-	@if ! $(KUBECTL) get gitrepository $(FLUX_DIA_REPO) -n flux-system > /dev/null 2>&1; then \
-		echo "Creating GitRepository source $(FLUX_DIA_REPO)..."; \
-		$(FLUX) create source git $(FLUX_DIA_REPO) \
-		  --url=ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_DIA_REPO).git \
-		  --branch=$(FLUX_GIT_BRANCH) \
-		  --secret-ref=$(FLUX_DIA_SECRET) \
-		  --interval=1m \
-		  --namespace=flux-system; \
-	else \
-		echo "GitRepository source $(FLUX_DIA_REPO) already exists."; \
-	fi	
-
-.PHONY: push-bng-manifests
-push-bng-manifests:
-	@echo "--> GIT: Forcing full snapshot push of BNG manifests to $(FLUX_BNG_REPO)"
-
-	@cd $(BNG_MANIFESTS_DIR) && \
-		( \
-			rm -rf .git && \
-			git init -b $(FLUX_GIT_BRANCH) && \
-			git remote add origin $(BNG_REPO_URL) && \
-			git add -A && \
-			git commit --allow-empty -m "Authoritative snapshot of BNG manifests" && \
-			git config core.sshCommand 'ssh -o IdentitiesOnly=yes -i $(FLUX_SSH_KEY)' && \
-			git push --force origin $(FLUX_GIT_BRANCH) \
-		)
-
-	@echo "--> GIT: Full snapshot push completed"
-
-
-.PHONY: push-dia-manifests
-push-dia-manifests:
-	@echo "--> GIT: Forcing full snapshot push of DIA manifests to $(FLUX_DIA_REPO)"
-
-	@cd $(DIA_MANIFESTS_DIR) && \
-		( \
-			rm -rf .git && \
-			git init -b $(FLUX_GIT_BRANCH) && \
-			git remote add origin $(DIA_REPO_URL) && \
-			git add -A && \
-			git commit --allow-empty -m "Authoritative snapshot of DIA manifests" && \
-			git config core.sshCommand 'ssh -o IdentitiesOnly=yes -i $(FLUX_SSH_KEY)' && \
-			git push --force origin $(FLUX_GIT_BRANCH) \
-		)
-
-	@echo "--> GIT: Full snapshot push completed"
-
-
-.PHONY: push-dia-grafana
-push-dia-grafana:
-	@echo "--> GIT: Forcing full snapshot push of DIA Grafana Dashboards to $(FLUX_DIA_GRAFANA_REPO)"
-
-	@cd $(DIA_GRAFANA_DIR) && \
-		( \
-			rm -rf .git && \
-			git init -b $(FLUX_GIT_BRANCH) && \
-			git remote add origin $(DIA_GRAFANA_REPO_URL) && \
-			git add -A && \
-			git commit --allow-empty -m "Authoritative snapshot of DIA manifests" && \
-			git config core.sshCommand 'ssh -o IdentitiesOnly=yes -i $(FLUX_SSH_KEY)' && \
-			git push --force origin $(FLUX_GIT_BRANCH) \
-		)
-
-	@echo "--> GIT: Full snapshot push completed"
-
-
-.PHONY: create-bng-kustomizations
-create-bng-kustomizations:
-	@echo "--> FLUX: Ensuring Kustomizations for BNG manifests exist"
-	@for d in $(BNG_MANIFESTS_DIR)/*/; do \
-		n=$$(basename "$$d"); \
-		if [ "$$n" != ".git" ]; then \
-			echo "Checking Kustomization for $$n..."; \
-			if $(FLUX) get kustomization "$$n" -n flux-system 2>&1 | grep -q "not found"; then \
-				echo "Creating Kustomization for $$n..."; \
-				$(FLUX) create kustomization "$$n" \
-				  --source=GitRepository/$(FLUX_BNG_REPO) \
-				  --path="./$$n" \
-				  --prune=true \
-				  --interval=1m \
-				  --timeout=1m \
-				  --namespace=flux-system; \
-			else \
-				echo "Kustomization for $$n already exists."; \
-			fi \
-		fi \
-	done	
-
-
-.PHONY: create-dia-kustomizations
-create-dia-kustomizations:
-	@echo "--> FLUX: Ensuring Kustomizations for DIA manifests exist"
-	@for d in $(DIA_MANIFESTS_DIR)/*/; do \
-		n=$$(basename "$$d"); \
-		if [ "$$n" != ".git" ]; then \
-			echo "Checking Kustomization for $$n..."; \
-			if $(FLUX) get kustomization "$$n" -n flux-system 2>&1 | grep -q "not found"; then \
-				echo "Creating Kustomization for $$n..."; \
-				$(FLUX) create kustomization "$$n" \
-				  --source=GitRepository/$(FLUX_DIA_REPO) \
-				  --path="./$$n" \
-				  --prune=true \
-				  --interval=1m \
-				  --timeout=1m \
-				  --namespace=flux-system; \
-			else \
-				echo "Kustomization for $$n already exists."; \
-			fi \
-		fi \
-	done	
-
-
-.PHONY: configure-auth
-
-ifeq ($(KEYCLOAK_ENABLED),YES)
-
-configure-auth:
-	@echo "--> AUTH: Configure nok-portal-auth"
-
-	@if [ ! -d "$(NOK_KEYCLOAK_DIR)" ]; then \
-		git clone -b $(KEYCLOAK_REPO_BRANCH) $(KEYCLOAK_REPO_URL) $(NOK_KEYCLOAK_DIR) ;\
-	else \
-		echo "--> GIT: $(NOK_KEYCLOAK_DIR) already exists. Skipping clone." ;\
-	fi
-
-	@$(KUBECTL) apply -f $(KEYCLOAK_DIR)/postgres-secret.yaml
-	@$(KUBECTL) apply -f $(KEYCLOAK_DIR)/postgres-service.yaml
-	@$(KUBECTL) apply -f $(KEYCLOAK_DIR)/postgres-statefulset.yaml
-
-	@$(KUBECTL) apply -f $(KEYCLOAK_DIR)/keycloak-portal-html-config.yaml
-	@$(KUBECTL) rollout restart deployment nok-apps-portal-app -n nok-bng
-	@$(KUBECTL) apply -f $(KEYCLOAK_DIR)/keycloak-admin-secret.yaml
-	@$(KUBECTL) apply -f $(KEYCLOAK_DIR)/keycloak-realm-configmap.yaml
-	@$(KUBECTL) apply -f $(KEYCLOAK_DIR)/keycloak-svc.yaml
-	@$(KUBECTL) apply -f $(KEYCLOAK_DIR)/keycloak-deploy.yaml
-	@$(KUBECTL) apply -f $(KEYCLOAK_DIR)/keycloak-ingress.yaml
-
-	@$(KUBECTL) apply -f $(OAUTH2_PROXY_DIR)/oauth2-proxy-secret.yaml
-	@$(KUBECTL) apply -f $(OAUTH2_PROXY_DIR)/oauth2-proxy-svc.yaml
-	@$(KUBECTL) apply -f $(OAUTH2_PROXY_DIR)/oauth2-proxy-deploy.yaml
-	@$(KUBECTL) apply -f $(OAUTH2_PROXY_DIR)/oauth2-proxy-ingress.yaml
-
-	@echo "--> AUTH: Patching application ingresses"
-
-	@$(KUBECTL) annotate ingress nok-apps-ingress \
-		-n nok-bng \
-		nginx.ingress.kubernetes.io/auth-url="http://oauth2-proxy.nok-bng.svc.cluster.local/oauth2/auth" \
-		nginx.ingress.kubernetes.io/auth-signin="http://bng.nok.local:8080/oauth2/start?rd=\$$escaped_request_uri" \
-		--overwrite
-
-	@$(KUBECTL) annotate ingress nok-apps-portal-ingress \
-		-n nok-bng \
-		nginx.ingress.kubernetes.io/auth-url="http://oauth2-proxy.nok-bng.svc.cluster.local/oauth2/auth" \
-		nginx.ingress.kubernetes.io/auth-signin="http://bng.nok.local:8080/oauth2/start?rd=\$$escaped_request_uri" \
-		--overwrite
-
-	@echo "--> AUTH: Deployment completed"
-
-else
-
-configure-auth:
-	@echo "--> AUTH: Keycloak disabled. Skipping authentication deployment."
-
-endif
-
+	  --verbose  
 
 .PHONY: set-proxy-env
-set-proxy-env:
+set-proxy-env: ## Apply HTTP/HTTPS proxy environment variables to configured deployments
 	@echo "--> PROXY: Applying proxy env to deployments"
 	@for item in $(PROXY_DEPLOYMENTS); do \
 		NS=$$(echo $$item | cut -d: -f1); \
 		DEP=$$(echo $$item | cut -d: -f2); \
-		echo "Updating $$DEP in namespace $$NS"; \
 		\
+		if ! $(KUBECTL) get deployment $$DEP -n $$NS >/dev/null 2>&1; then \
+			echo "--> Skipping $$DEP (not found in namespace $$NS)"; \
+			continue; \
+		fi; \
+		\
+		echo "Updating $$DEP in namespace $$NS"; \
 		$(KUBECTL) set env deployment $$DEP \
 			HTTP_PROXY="$(HTTP_PROXY)" \
 			HTTPS_PROXY="$(HTTPS_PROXY)" \
@@ -1068,7 +533,7 @@ set-proxy-env:
 
 
 .PHONY: unset-proxy-env
-unset-proxy-env:
+unset-proxy-env: ## Remove HTTP/HTTPS proxy environment variables from configured deployments
 	@echo "--> PROXY: Removing proxy env from deployments"
 	@for item in $(PROXY_DEPLOYMENTS); do \
 		NS=$$(echo $$item | cut -d: -f1); \
@@ -1084,7 +549,7 @@ unset-proxy-env:
 
 
 .PHONY: backup-deployments
-backup-deployments:
+backup-deployments: ## Back up configured deployment manifests before proxy changes
 	@mkdir -p backup
 	@for item in $(PROXY_DEPLOYMENTS); do \
 		NS=$$(echo $$item | cut -d: -f1); \
