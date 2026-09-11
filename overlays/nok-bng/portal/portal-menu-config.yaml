@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nok-apps-menu-config
+  namespace: nok-bng
+data:
+  menu-config.json: |
+    [
+      {"name": "Prometheus", "path": "/prometheus/graph", "openInNewTab": false},
+      {"name": "Grafana", "path": "/grafana/dashboards", "openInNewTab": true},
+      {"name": "Alertmanager", "path": "/alertmanager", "openInNewTab": false},
+      {"name": "Gitea", "path": "/gitea/nok/nok-bng-resources", "openInNewTab": false},
+      {"name": "BBM (Self Monitoring)", "path": "/bbm/dashboards", "openInNewTab": true}
+    ]

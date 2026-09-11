@@ -71,6 +71,28 @@ generate-portal-pv: ## Synchronize portal files into the KinD control-plane node
 	@docker cp $(NOK_KPT_DIR)/nok-base/portal $(KIND_CLUSTER_NAME)-control-plane:/portal
 	@echo "--> PORTAL: Portal files synchronized"
 
+.PHONY: apply-kpt-overlays
+apply-kpt-overlays: ## Apply NetOpsKube overlays on top of cloned nok-kpt packages
+	@if [ ! -d "$(BASE)/overlays" ]; then \
+		echo "--> OVERLAY: No overlays directory, skipping" ;\
+	elif [ ! -d "$(NOK_KPT_DIR)" ]; then \
+		echo "Error: $(NOK_KPT_DIR) not found — run 'make git-clone-kpt' first" ;\
+		exit 1 ;\
+	else \
+		echo "--> OVERLAY: Applying NetOpsKube overlays to $(NOK_KPT_DIR)" ;\
+		cp -r $(BASE)/overlays/. $(NOK_KPT_DIR)/ ;\
+		rm -f $(NOK_KPT_DIR)/nok-git/gitea/ingress.yaml ;\
+		sed -i \
+			-e 's|DOMAIN=git.example.com|DOMAIN=bng.nok.local|' \
+			-e 's|ROOT_URL=http://git.example.com|ROOT_URL=http://bng.nok.local:8080/gitea/|' \
+			-e 's|SSH_DOMAIN=git.example.com|SSH_DOMAIN=bng.nok.local|' \
+			$(NOK_KPT_DIR)/nok-git/gitea/gitea-manifest-standalone.yaml ;\
+		if ! grep -q 'SERVE_FROM_SUB_PATH=true' $(NOK_KPT_DIR)/nok-git/gitea/gitea-manifest-standalone.yaml; then \
+			sed -i '/ROOT_URL=http:\/\/bng.nok.local:8080\/gitea\//a\    SERVE_FROM_SUB_PATH=true' \
+				$(NOK_KPT_DIR)/nok-git/gitea/gitea-manifest-standalone.yaml ;\
+		fi ;\
+	fi
+
 .PHONY: cluster-up
 cluster-up: $(KIND_CONFIG_REAL_LOC) ## Bring up the KinD cluster
 	@echo "--> KIND: Ensuring control-plane exists"
