@@ -73,4 +73,4 @@ Interim without Gitea: set `GRAFANA_DASHBOARD_SOURCE=upstream` or embed JSON in 
 
 ## Recipe testing
 
-See [EPIC9.md](EPIC9.md) and [test/README.md](../test/README.md) for per-recipe verification (`make verify-recipe-bng`, `make test-recipes`).
+See [unit-tests.md](unit-tests.md) and [test/README.md](../test/README.md) for per-recipe verification (`make verify-recipe-bng`, `make test-recipes`).
