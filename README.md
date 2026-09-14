@@ -1,19 +1,6 @@
-<table width="100%" cellpadding="0" cellspacing="0">
-<tr>
-<td bgcolor="#0F172A" style="padding: 16px 28px;">
-
-<font color="#FFFFFF" size="6"><b>NetOpsKube - NetOps Kubernetes Project</b></font><br> <font color="#94A3B8" size="3">Open Source Network Automation & Observability Platform</font>
-
-<br>
-
-<font color="#38BDF8"><b>SEE IT</b></font>
- ·  <font color="#38BDF8"><b>RUN IT</b></font>
- ·  <font color="#38BDF8"><b>OWN IT</b></font>
- ·  <font color="#38BDF8"><b>EXTEND IT</b></font>
-
-</td>
-</tr>
-</table>
+<p align="center">
+  <img src="docs/img/banner.png" width="100%">
+</p>
 
 NetOpsKube is a collaborative open-source project that provides a Kubernetes-based platform for deploying and managing network applications and services. It establishes a foundational platform with integrated observability, GitOps, network automation, and configuration management capabilities. The platform integrates tools such as Grafana, Prometheus, gNMIc, Gitea, Flux, Containerlab, and SDCIO (Kubenet), and provides a common foundation for deploying network solutions such as BNG and DIA.
 
@@ -67,47 +54,9 @@ NetOpsKube provides a common platform and unified portal for network observabili
 
 Get a complete NetOpsKube environment running in a few commands.
 
-<table width="100%" cellpadding="6" cellspacing="0">
-<tr>
-
-<td width="23%" align="center">
-<font color="#2563EB" size="4"><b>01</b></font><br>
-<b>Clone Repository </b><br>
-<font color="#64748B" size="2">Get NetOpsKube</font>
-</td>
-
-<td width="5%" align="center">
-<font color="#2563EB" size="7"><b>→</b></font>
-</td>
-
-<td width="23%" align="center">
-<font color="#2563EB" size="4"><b>02</b></font><br>
-<b>Deploy Containerlab</b><br>
-<font color="#64748B" size="2">Network Topology</font>
-</td>
-
-<td width="5%" align="center">
-<font color="#2563EB" size="7"><b>→</b></font>
-</td>
-
-<td width="23%" align="center">
-<font color="#2563EB" size="4"><b>03</b></font><br>
-<b>Deploy Base NOK Platform </b><br>
-<font color="#64748B" size="2">Kubernetes + GitOps</font>
-</td>
-
-<td width="5%" align="center">
-<font color="#2563EB" size="7"><b>→</b></font>
-</td>
-
-<td width="23%" align="center">
-<font color="#2563EB" size="4"><b>04</b></font><br>
-<b>Deploy Domain</b><br>
-<font color="#64748B" size="2">BNG or DIA</font>
-</td>
-
-</tr>
-</table>
+<p align="center">
+  <img src="docs/img/qs.png" width="100%">
+</p>
 
 ### BNG
 
