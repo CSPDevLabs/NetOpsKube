@@ -24,7 +24,7 @@ BNG_REPO_URL = ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_BNG_REPO).
 try-nok-bng: install-bng-pkg gitops-bng-kustomization portal-enable-bng annotate-auth-ingress-bng annotate-auth-ingress-gitea ## Deploy the BNG solution
 
 .PHONY: gitops-bng-kustomization
-gitops-bng-kustomization: gitea-create-bng-repo gitea-create-grafana-dashboards-repo flux-create-bng-secret flux-create-bng-source push-bng-manifests push-bng-grafana-dashboards create-bng-kustomizations ## Synchronize BNG manifests with Flux
+gitops-bng-kustomization: gitea-create-bng-repo gitea-create-grafana-dashboards-repo flux-create-bng-secret push-bng-manifests push-bng-grafana-dashboards flux-create-bng-source create-bng-kustomizations ## Synchronize BNG manifests with Flux
 	@echo "--> GITOPS: BNG repo in sync by Flux"
 
 .PHONY: deploy-clab-bng
@@ -50,22 +50,21 @@ destroy-clab-bng: check-tools git-clone-clab ## Destroys the Containerlab BNG to
 	
 
 .PHONY: install-bng-pkg
-install-bng-pkg: check-tools git-clone-kpt configure-sdcio-kpt ## Installs the BNG kpt package from ./nok-kpt/nok-bng
+install-bng-pkg: check-tools git-clone-kpt apply-kpt-overlays configure-sdcio-kpt ## Installs the BNG kpt package from ./nok-kpt/nok-bng
 	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-bng,nok-bng,"--reconcile-timeout=5m", "--inventory-policy=adopt")
 
 .PHONY: gitea-create-bng-repo
-gitea-create-bng-repo: ## Create the BNG GitOps repository in Gitea
+gitea-create-bng-repo: wait-for-gitea-ready ## Create the BNG GitOps repository in Gitea
 	@echo "--> GITEA: Ensuring repo $(FLUX_BNG_REPO) exists"
-	@$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) \
-	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
-	  http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/repos/$(GITEA_ADMIN_USER)/$(FLUX_BNG_REPO) \
-	  >/dev/null || \
-	$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) \
-	  -X POST \
-	  -H "Content-Type: application/json" \
-	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
-	  -d '{"name":"$(FLUX_BNG_REPO)", "description": "BNG resources for Network Observability and Conf Management","private":false,"auto_init":true}' \
-	  http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/user/repos
+	@GITOPS_NAMESPACE="$(GITOPS_NAMESPACE)" GITEA_ADMIN_USER="$(GITEA_ADMIN_USER)" \
+		GITEA_ADMIN_PASS="$(GITEA_ADMIN_PASS)" KUBECTL="$(KUBECTL)" \
+		"$(BASE)/scripts/gitea-api.sh" "/repos/$(GITEA_ADMIN_USER)/$(FLUX_BNG_REPO)" \
+		>/dev/null || \
+	GITEA_API_METHOD=POST \
+		GITEA_API_DATA='{"name":"$(FLUX_BNG_REPO)", "description": "BNG resources for Network Observability and Conf Management","private":false,"auto_init":true}' \
+		GITOPS_NAMESPACE="$(GITOPS_NAMESPACE)" GITEA_ADMIN_USER="$(GITEA_ADMIN_USER)" \
+		GITEA_ADMIN_PASS="$(GITEA_ADMIN_PASS)" KUBECTL="$(KUBECTL)" \
+		"$(BASE)/scripts/gitea-api.sh" /user/repos
 
 .PHONY: flux-create-bng-secret
 flux-create-bng-secret: ## Create the Flux Git authentication secret for BNG
@@ -82,7 +81,7 @@ flux-create-bng-secret: ## Create the Flux Git authentication secret for BNG
 	fi
 
 .PHONY: flux-create-bng-source
-flux-create-bng-source: ## Create the Flux GitRepository source for BNG
+flux-create-bng-source: ## Create the Flux GitRepository source for BNG (after manifests are pushed)
 	@echo "--> FLUX: Ensuring GitRepository source $(FLUX_BNG_REPO) exists"
 	@if ! $(KUBECTL) get gitrepository $(FLUX_BNG_REPO) -n flux-system > /dev/null 2>&1; then \
 		echo "Creating GitRepository source $(FLUX_BNG_REPO)..."; \
@@ -91,10 +90,13 @@ flux-create-bng-source: ## Create the Flux GitRepository source for BNG
 		  --branch=$(FLUX_GIT_BRANCH) \
 		  --secret-ref=$(FLUX_BNG_SECRET) \
 		  --interval=1m \
-		  --namespace=flux-system; \
+		  --namespace=flux-system \
+		  --wait=false; \
 	else \
 		echo "GitRepository source $(FLUX_BNG_REPO) already exists."; \
 	fi
+	@echo "--> FLUX: Reconciling GitRepository $(FLUX_BNG_REPO) (timeout 10m)"
+	@$(FLUX) reconcile source git $(FLUX_BNG_REPO) -n flux-system --timeout=10m
 
 .PHONY: push-bng-manifests
 push-bng-manifests: stage-bng-manifests ## Push the BNG manifests snapshot to the Gitea repository
@@ -148,6 +150,6 @@ create-bng-kustomizations: ## Create Flux Kustomizations for BNG manifests
 portal-enable-bng: ## Enable the BNG solution in the NetOpsKube Portal
 	@echo "--> PORTAL: Enabling BNG menu"
 	@$(KUBECTL) get configmap nok-apps-menu-config -n nok-base -o json | \
-	jq '.data["menu-config.json"] |= (fromjson | .solutions |= map(if .id == "nok-bng" then .deployed = "yes" else . end) | tojson)' | \
+	jq '.data["menu-config.json"] |= (fromjson | .featured |= map(. + {"openInNewTab": false}) | .solutions |= map(if .id == "nok-bng" then .deployed = "yes" | .services |= map(. + {"openInNewTab": false}) else . end) | tojson)' | \
 	$(KUBECTL) apply -f -
 	@$(KUBECTL) rollout restart deployment/nok-apps-portal-app -n nok-base

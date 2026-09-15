@@ -162,6 +162,8 @@ GITEA_SSH_HOST = $(KIND_NET_PREFIX).$(KIND_LB_GITEA_SSH_HOST)
 GITEA_ADMIN_USER ?= nok
 GITEA_ADMIN_PASS ?= N0kP4ssw0rd
 GITEA_ADMIN_EMAIL ?= nok@example.com
+# docker.gitea.com is often blocked on corporate networks; Docker Hub mirror works better
+GITEA_IMAGE ?= docker.io/gitea/gitea:1.25.4-rootless
 
 FLUX_GIT_REPO ?= flux-bootstrap
 FLUX_GIT_BRANCH ?= main
@@ -171,6 +173,7 @@ FLUX_SSH_KEY ?= $(HOME)/.ssh/flux_ed25519
 define GET_GITEA_POD
 $(shell $(KUBECTL) get pods -n $(GITOPS_NAMESPACE) \
   -l app.kubernetes.io/name=gitea \
+  --field-selector=status.phase=Running \
   -o jsonpath='{.items[0].metadata.name}')
 endef
 

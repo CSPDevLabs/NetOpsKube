@@ -143,15 +143,14 @@ push-dia-grafana-dashboards: ## Push DIA Grafana JSON to in-cluster Gitea repo
 push-grafana-dashboards: push-bng-grafana-dashboards push-dia-grafana-dashboards ## Push BNG + DIA Grafana JSON (both recipes)
 
 .PHONY: gitea-create-grafana-dashboards-repo
-gitea-create-grafana-dashboards-repo: ## Ensure grafana-dashboards Gitea repo exists (BNG + DIA)
+gitea-create-grafana-dashboards-repo: wait-for-gitea-ready ## Ensure grafana-dashboards Gitea repo exists (BNG + DIA)
 	@echo "--> GITEA: Ensuring repo $(FLUX_GRAFANA_REPO) exists"
-	@$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) \
-	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
-	  http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/repos/$(GITEA_ADMIN_USER)/$(FLUX_GRAFANA_REPO) \
-	  >/dev/null || \
-	$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) \
-	  -X POST \
-	  -H "Content-Type: application/json" \
-	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
-	  -d '{"name":"$(FLUX_GRAFANA_REPO)", "description": "NetOpsKube Grafana dashboards (BNG + DIA)","private":false,"auto_init":true}' \
-	  http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/user/repos
+	@GITOPS_NAMESPACE="$(GITOPS_NAMESPACE)" GITEA_ADMIN_USER="$(GITEA_ADMIN_USER)" \
+		GITEA_ADMIN_PASS="$(GITEA_ADMIN_PASS)" KUBECTL="$(KUBECTL)" \
+		"$(BASE)/scripts/gitea-api.sh" "/repos/$(GITEA_ADMIN_USER)/$(FLUX_GRAFANA_REPO)" \
+		>/dev/null || \
+	GITEA_API_METHOD=POST \
+		GITEA_API_DATA='{"name":"$(FLUX_GRAFANA_REPO)", "description": "NetOpsKube Grafana dashboards (BNG + DIA)","private":false,"auto_init":true}' \
+		GITOPS_NAMESPACE="$(GITOPS_NAMESPACE)" GITEA_ADMIN_USER="$(GITEA_ADMIN_USER)" \
+		GITEA_ADMIN_PASS="$(GITEA_ADMIN_PASS)" KUBECTL="$(KUBECTL)" \
+		"$(BASE)/scripts/gitea-api.sh" /user/repos
