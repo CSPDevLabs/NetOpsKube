@@ -50,6 +50,8 @@ endif
 include make/bng.mk
 include make/dia.mk
 include make/auth.mk
+include make/recipe-verify.mk
+include make/test.mk
 
 # Deployments (namespace:name) that receive proxy env via set-proxy-env / unset-proxy-env.
 PROXY_DEPLOYMENTS := \
