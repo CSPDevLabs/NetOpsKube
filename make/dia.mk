@@ -17,6 +17,7 @@
 
 FLUX_DIA_REPO ?= nok-dia-resources
 FLUX_DIA_SECRET ?= nok-dia-auth
+FLUX_DIA_KUST_PREFIX ?= dia-
 DIA_MANIFESTS_DIR := $(NOK_CLABS_DIR)/nok-dia/nok-manifests
 DIA_REPO_URL = ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_DIA_REPO).git
 
@@ -132,13 +133,14 @@ create-dia-kustomizations: ## Create Flux Kustomizations for DIA manifests
 			done; \
 		fi; \
 		if [ "$$skip" = "1" ]; then \
-			echo "Skipping Kustomization dia-$$n (SDCIO disabled)"; \
+			echo "Skipping Kustomization $(FLUX_DIA_KUST_PREFIX)$$n (SDCIO disabled)"; \
 			continue; \
 		fi; \
-		echo "Checking Kustomization for $$n..."; \
-		if $(FLUX) get kustomization "dia-$$n" -n flux-system 2>&1 | grep -q "not found"; then \
-			echo "Creating Kustomization for $$n..."; \
-			$(FLUX) create kustomization "dia-$$n" \
+		kname="$(FLUX_DIA_KUST_PREFIX)$$n"; \
+		echo "Checking Kustomization for $$kname..."; \
+		if $(FLUX) get kustomization "$$kname" -n flux-system 2>&1 | grep -q "not found"; then \
+			echo "Creating Kustomization $$kname..."; \
+			$(FLUX) create kustomization "$$kname" \
 			  --source=GitRepository/$(FLUX_DIA_REPO) \
 			  --path="./$$n" \
 			  --prune=true \
@@ -146,7 +148,7 @@ create-dia-kustomizations: ## Create Flux Kustomizations for DIA manifests
 			  --timeout=1m \
 			  --namespace=flux-system; \
 		else \
-			echo "Kustomization for $$n already exists."; \
+			echo "Kustomization $$kname already exists."; \
 		fi; \
 	done
 
