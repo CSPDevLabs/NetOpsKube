@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: bbm-ingress
+  namespace: nok-bbm
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/proxy-hide-headers: "X-Frame-Options"
+    netopskube.io/bbm: "true"
+    netopskube.io/prober: http
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: bng.nok.local # kpt-set: ${ingress-host}
+    http:
+      paths:
+      - path: /bbm(/|$)(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: bbm-grafana-service
+            port:
+              number: 80

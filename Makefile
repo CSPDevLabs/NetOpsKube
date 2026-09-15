@@ -75,6 +75,10 @@ gitops-init: gitea-create-admin gitea-create-flux-repo gitea-add-ssh-key flux-bo
 
 .PHONY: generate-portal-pv
 generate-portal-pv: ## Synchronize portal files into the KinD control-plane node
+	@if ! docker inspect "$(KIND_CLUSTER_NAME)-control-plane" >/dev/null 2>&1; then \
+		echo "Error: KinD node $(KIND_CLUSTER_NAME)-control-plane not found — run 'make cluster-up' first" >&2 ;\
+		exit 1 ;\
+	fi
 	@echo "--> PORTAL: Syncing portal files into Kind node"
 	@docker exec $(KIND_CLUSTER_NAME)-control-plane rm -rf /portal
 	@docker cp $(NOK_KPT_DIR)/nok-base/portal $(KIND_CLUSTER_NAME)-control-plane:/portal
@@ -90,22 +94,32 @@ apply-kpt-overlays: git-clone-kpt ## Apply NetOpsKube overlays on top of cloned 
 	else \
 		echo "--> OVERLAY: Applying NetOpsKube overlays to $(NOK_KPT_DIR)" ;\
 		cp -r $(BASE)/overlays/. $(NOK_KPT_DIR)/ ;\
-		rm -f $(NOK_KPT_DIR)/nok-git/gitea/ingress.yaml ;\
-		sed -i \
-			-e 's|DOMAIN=git.example.com|DOMAIN=bng.nok.local|' \
-			-e 's|ROOT_URL=http://git.example.com|ROOT_URL=http://bng.nok.local:8080/gitea/|' \
-			-e 's|SSH_DOMAIN=git.example.com|SSH_DOMAIN=bng.nok.local|' \
-			$(NOK_KPT_DIR)/nok-git/gitea/gitea-manifest-standalone.yaml ;\
-		if ! grep -q 'SERVE_FROM_SUB_PATH=true' $(NOK_KPT_DIR)/nok-git/gitea/gitea-manifest-standalone.yaml; then \
-			sed -i '/ROOT_URL=http:\/\/bng.nok.local:8080\/gitea\//a\    SERVE_FROM_SUB_PATH=true' \
-				$(NOK_KPT_DIR)/nok-git/gitea/gitea-manifest-standalone.yaml ;\
-		fi ;\
+	fi
+
+.PHONY: patch-gitea-kpt-manifest
+patch-gitea-kpt-manifest: git-clone-kpt ## Patch Gitea kpt manifest for KinD (URLs, subpath, image registry)
+	@GITEA_MANIFEST="$(NOK_KPT_DIR)/nok-git/gitea/gitea-manifest-standalone.yaml" ; \
+	if [ ! -f "$$GITEA_MANIFEST" ]; then \
+		echo "Error: $$GITEA_MANIFEST not found — run 'make git-clone-kpt' first" >&2 ; exit 1 ; \
+	fi ; \
+	echo "--> GITEA: Patching manifest (image=$(GITEA_IMAGE))" ; \
+	rm -f $(NOK_KPT_DIR)/nok-git/gitea/ingress.yaml ; \
+	sed -i \
+		-e 's|docker.gitea.com/gitea:1.25.4-rootless|$(GITEA_IMAGE)|g' \
+		-e 's|DOMAIN=git.example.com|DOMAIN=bng.nok.local|' \
+		-e 's|ROOT_URL=http://git.example.com|ROOT_URL=http://bng.nok.local:8080/gitea/|' \
+		-e 's|SSH_DOMAIN=git.example.com|SSH_DOMAIN=bng.nok.local|' \
+		"$$GITEA_MANIFEST" ; \
+	if ! grep -q 'SERVE_FROM_SUB_PATH=true' "$$GITEA_MANIFEST"; then \
+		sed -i '/ROOT_URL=http:\/\/bng.nok.local:8080\/gitea\//a\    SERVE_FROM_SUB_PATH=true' \
+			"$$GITEA_MANIFEST" ; \
 	fi
 
 .PHONY: cluster-up
 cluster-up: $(KIND_CONFIG_REAL_LOC) ## Bring up the KinD cluster
 	@echo "--> KIND: Ensuring control-plane exists"
 	@{ \
+		set -euo pipefail ;\
 		cp $(KIND_CONFIG_REAL_LOC) $(KIND_LAUNCH_CONFIG) ;\
 		if [ ! -z "$(KIND_API_SERVER_ADDRESS)" ]; then \
 			echo "--> KIND: Setting API server address to $(KIND_API_SERVER_ADDRESS)" ;\
@@ -126,9 +140,16 @@ cluster-up: $(KIND_CONFIG_REAL_LOC) ## Bring up the KinD cluster
 		done ;\
 		if [[ "$${MATCHED}" == "0" ]]; then \
 			echo "--> KIND: Creating cluster named $(KIND_CLUSTER_NAME)..." ;\
-			$(KIND) create cluster --name $(KIND_CLUSTER_NAME) --config $(KIND_LAUNCH_CONFIG) 2>&1 | $(INDENT_OUT) ;\
+			if ! $(KIND) create cluster --name $(KIND_CLUSTER_NAME) --config $(KIND_LAUNCH_CONFIG) 2>&1 | $(INDENT_OUT); then \
+				echo "Error: KinD cluster creation failed (see output above)" >&2 ;\
+				exit 1 ;\
+			fi ;\
 		else \
 			echo "--> KIND: Cluster named $(KIND_CLUSTER_NAME) already exists" ;\
+		fi ;\
+		if ! docker inspect "$(KIND_CLUSTER_NAME)-control-plane" >/dev/null 2>&1; then \
+			echo "Error: KinD node $(KIND_CLUSTER_NAME)-control-plane not found after cluster-up" >&2 ;\
+			exit 1 ;\
 		fi ;\
 	}
 	@$(MAKE) update-kpt-lb-setters
@@ -136,8 +157,8 @@ cluster-up: $(KIND_CONFIG_REAL_LOC) ## Bring up the KinD cluster
 .PHONY: update-kpt-lb-setters
 update-kpt-lb-setters: git-clone-kpt $(YQ) ## Write KinD LB IPs into nok-kpt apply-setters.yaml (kpt#27)
 	@IP_PREFIX="$(KIND_NET_PREFIX)" ;\
-	if [ -z "$$IP_PREFIX" ]; then \
-		echo "Error: KinD cluster '$(KIND_CLUSTER_NAME)' not found — cannot detect network prefix" ;\
+	if [ -z "$$IP_PREFIX" ] || [ "$$IP_PREFIX" = ".." ] || ! echo "$$IP_PREFIX" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$$'; then \
+		echo "Error: KinD cluster '$(KIND_CLUSTER_NAME)' not found — cannot detect network prefix (got '$$IP_PREFIX')" ;\
 		exit 1 ;\
 	fi ;\
 	if [ ! -f "$(NOK_KPT_DIR)/nok-base/Kptfile" ]; then \
@@ -161,8 +182,8 @@ update-kpt-lb-setters: git-clone-kpt $(YQ) ## Write KinD LB IPs into nok-kpt app
 .PHONY: show-kind-lb-setters
 show-kind-lb-setters: ## Show KinD LB prefix and apply-setters.yaml values (kpt#27)
 	@IP_PREFIX="$(KIND_NET_PREFIX)" ;\
-	if [ -z "$$IP_PREFIX" ]; then \
-		echo "Error: KinD cluster '$(KIND_CLUSTER_NAME)' not found" ; exit 1 ;\
+	if [ -z "$$IP_PREFIX" ] || [ "$$IP_PREFIX" = ".." ] || ! echo "$$IP_PREFIX" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$$'; then \
+		echo "Error: KinD cluster '$(KIND_CLUSTER_NAME)' not found (got '$$IP_PREFIX')" ; exit 1 ;\
 	fi ;\
 	echo "--> KIND: KinD LB network prefix is $$IP_PREFIX (template: $(KIND_LB_DEFAULT_PREFIX))" ;\
 	echo "--> KPT: apply-setters.yaml values (run 'make update-kpt-lb-setters' to refresh):" ;\
@@ -328,7 +349,7 @@ install-base-final: update-kpt-lb-setters
 	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-base,nok-base,"--reconcile-timeout=5m", "--inventory-policy=adopt")	
 
 .PHONY: install-git-pkg
-install-git-pkg: install-lb-pkg ## Installs the base kpt package from ./nok-kpt/nok-git
+install-git-pkg: install-lb-pkg patch-gitea-kpt-manifest preload-gitea-image ## Installs the base kpt package from ./nok-kpt/nok-git
 	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-git,nok-git,"--reconcile-timeout=5m", "--inventory-policy=adopt")
 
 .PHONY: install-lb-pkg
@@ -345,7 +366,7 @@ wait-for-metallb-ready: ## Wait for the Kubernetes Metallb node to be ready
 	}	
 
 .PHONY: install-bbm-pkg
-install-bbm-pkg: update-kpt-tuning-setters ## Installs the BBM (self-monitoring and observability) kpt package from ./nok-kpt/nok-bbm
+install-bbm-pkg: update-kpt-tuning-setters apply-kpt-overlays ## Installs the BBM (self-monitoring and observability) kpt package from ./nok-kpt/nok-bbm
 	@echo "--> INSTALL: [\033[1;34mBBM\033[0m] - Applying kpt package with setters"
 	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-bbm,nok-bbm,"--reconcile-timeout=5m", "--inventory-policy=adopt")
 
@@ -393,19 +414,46 @@ install-gnmic-oper: $(KUBECTL) ## Installs the GNMIc Operator manifest
 	@$(KUBECTL) create -f ./nok-kpt/nok-base-gnmic-oper/install.yaml
 	@echo -e "--> INSTALL: [\033[0;32mGNMIc Operator\033[0m] - Manifest applied successfully."
 
+.PHONY: wait-for-gitea-ready
+wait-for-gitea-ready: ## Wait for Gitea deployment rollout (ignores stale failed pods)
+	@echo "--> GITEA: Removing stale Gitea pods from prior rollouts"
+	@for pod in $$($(KUBECTL) get pods -n $(GITOPS_NAMESPACE) \
+		-l app.kubernetes.io/name=gitea \
+		--field-selector=status.phase!=Running \
+		-o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do \
+		[ -n "$$pod" ] && $(KUBECTL) delete pod -n $(GITOPS_NAMESPACE) "$$pod" --ignore-not-found --wait=false ; \
+	done
+	@echo "--> GITEA: Waiting for deployment rollout (max 10 minutes)"
+	@if ! $(KUBECTL) rollout status deployment/gitea -n $(GITOPS_NAMESPACE) --timeout=600s; then \
+		echo "Error: Gitea deployment not ready — try 'make preload-gitea-image' then 'make install-git-pkg'" >&2 ; \
+		$(KUBECTL) get pods -n $(GITOPS_NAMESPACE) -l app.kubernetes.io/name=gitea >&2 ; \
+		exit 1 ; \
+	fi
+	@echo "--> GITEA: Deployment is ready"
+
+.PHONY: preload-gitea-image
+preload-gitea-image: ## Pre-pull Gitea image on host and load into KinD (fixes ImagePullBackOff)
+	@echo "--> GITEA: Ensuring $(GITEA_IMAGE) is available on host"
+	@if ! docker image inspect "$(GITEA_IMAGE)" >/dev/null 2>&1; then \
+		docker pull "$(GITEA_IMAGE)" ; \
+	fi
+	@echo "--> GITEA: Loading image into KinD cluster $(KIND_CLUSTER_NAME)"
+	@$(KIND) load docker-image "$(GITEA_IMAGE)" --name $(KIND_CLUSTER_NAME)
+	@echo "--> GITEA: Image loaded"
+
 .PHONY: gitea-create-admin
-gitea-create-admin: ## Create the Gitea administrator user
+gitea-create-admin: wait-for-gitea-ready ## Create the Gitea administrator user
 	@echo "--> GITEA: Ensuring admin user exists"
 	@POD="$(call GET_GITEA_POD)" ;\
 	if [ -z "$$POD" ]; then \
 		echo "[ERROR] Gitea pod not found" ; exit 1 ;\
 	fi ;\
-	if $(KUBECTL) exec -n $(GITOPS_NAMESPACE) $$POD -- \
-	     curl -sf http://localhost:3000/api/v1/users/$(GITEA_ADMIN_USER) >/dev/null; then \
+	if $(KUBECTL) exec -n $(GITOPS_NAMESPACE) $$POD -c gitea -- \
+	     curl -sf http://localhost:3000/api/v1/users/$(GITEA_ADMIN_USER) >/dev/null 2>&1; then \
 		echo "--> GITEA: User $(GITEA_ADMIN_USER) already exists, skipping"; \
 	else \
 		echo "--> GITEA: Creating admin user $(GITEA_ADMIN_USER)"; \
-		$(KUBECTL) exec -n $(GITOPS_NAMESPACE) $$POD -- \
+		$(KUBECTL) exec -n $(GITOPS_NAMESPACE) $$POD -c gitea -- \
 		  gitea admin user create \
 		    --username $(GITEA_ADMIN_USER) \
 		    --password "$(GITEA_ADMIN_PASS)" \
@@ -414,16 +462,14 @@ gitea-create-admin: ## Create the Gitea administrator user
 	fi
 
 .PHONY: gitea-create-flux-repo
-gitea-create-flux-repo: ## Create the Flux Git repository in Gitea
+gitea-create-flux-repo: wait-for-gitea-ready ## Create the Flux Git repository in Gitea
 	@echo "--> GITEA: Waiting for API to become available (max 3 minutes)"
 	@set -e; \
 	timeout=180; \
 	while [ $$timeout -gt 0 ]; do \
-		if $(CURL) --silent --fail \
-			--resolve $(GITEA_HOST):80:$(GITEA_IP) \
-			-u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
-			http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/user/repos \
-			>/dev/null; then \
+		if GITOPS_NAMESPACE="$(GITOPS_NAMESPACE)" GITEA_ADMIN_USER="$(GITEA_ADMIN_USER)" \
+			GITEA_ADMIN_PASS="$(GITEA_ADMIN_PASS)" KUBECTL="$(KUBECTL)" \
+			"$(BASE)/scripts/gitea-api.sh" /version >/dev/null 2>&1; then \
 			echo "--> GITEA: API is available"; \
 			break; \
 		fi; \
@@ -436,22 +482,19 @@ gitea-create-flux-repo: ## Create the Flux Git repository in Gitea
 	fi
 
 	@echo "--> GITEA: Ensuring repo $(FLUX_GIT_REPO) exists"
-	@$(CURL) --silent --fail \
-	  --resolve $(GITEA_HOST):80:$(GITEA_IP) \
-	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
-	  http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/repos/$(GITEA_ADMIN_USER)/$(FLUX_GIT_REPO) \
-	  >/dev/null || \
-	$(CURL) --silent --fail \
-	  --resolve $(GITEA_HOST):80:$(GITEA_IP) \
-	  -X POST \
-	  -H "Content-Type: application/json" \
-	  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
-	  -d '{"name":"$(FLUX_GIT_REPO)","private":false,"auto_init":true}' \
-	  http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/user/repos
+	@GITOPS_NAMESPACE="$(GITOPS_NAMESPACE)" GITEA_ADMIN_USER="$(GITEA_ADMIN_USER)" \
+		GITEA_ADMIN_PASS="$(GITEA_ADMIN_PASS)" KUBECTL="$(KUBECTL)" \
+		"$(BASE)/scripts/gitea-api.sh" "/repos/$(GITEA_ADMIN_USER)/$(FLUX_GIT_REPO)" \
+		>/dev/null || \
+	GITEA_API_METHOD=POST \
+		GITEA_API_DATA='{"name":"$(FLUX_GIT_REPO)","private":false,"auto_init":true}' \
+		GITOPS_NAMESPACE="$(GITOPS_NAMESPACE)" GITEA_ADMIN_USER="$(GITEA_ADMIN_USER)" \
+		GITEA_ADMIN_PASS="$(GITEA_ADMIN_PASS)" KUBECTL="$(KUBECTL)" \
+		"$(BASE)/scripts/gitea-api.sh" /user/repos
 
 
 .PHONY: gitea-add-ssh-key
-gitea-add-ssh-key: ## Add SSH key to Gitea
+gitea-add-ssh-key: wait-for-gitea-ready ## Add SSH key to Gitea
 	@set -e; \
 	echo "--> GITEA: Ensuring SSH key is registered"; \
 	\
@@ -471,18 +514,18 @@ gitea-add-ssh-key: ## Add SSH key to Gitea
 	\
 	SSH_KEY="$$(cat $(FLUX_SSH_KEY).pub)"; \
 	echo "--> SSH: Using Public Key: $$SSH_KEY"; \
-	if $(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) \
-	     -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
-	     http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/user/keys | \
-	     jq -r '.[].key' | grep -Fxq "$$SSH_KEY"; then \
+	KEYS=$$(GITOPS_NAMESPACE="$(GITOPS_NAMESPACE)" GITEA_ADMIN_USER="$(GITEA_ADMIN_USER)" \
+		GITEA_ADMIN_PASS="$(GITEA_ADMIN_PASS)" KUBECTL="$(KUBECTL)" \
+		"$(BASE)/scripts/gitea-api.sh" /user/keys); \
+	if echo "$$KEYS" | jq -r '.[].key' | grep -Fxq "$$SSH_KEY"; then \
 		echo "--> GITEA: SSH key already registered, skipping"; \
 	else \
 		echo "--> GITEA: Registering SSH key"; \
-		$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) -X POST \
-		  -H "Content-Type: application/json" \
-		  -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
-		  -d "{\"title\":\"flux ssh key\",\"key\":\"$$SSH_KEY\"}" \
-		  http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/user/keys; \
+		GITEA_API_METHOD=POST \
+		GITEA_API_DATA="{\"title\":\"flux ssh key\",\"key\":\"$$SSH_KEY\"}" \
+		GITOPS_NAMESPACE="$(GITOPS_NAMESPACE)" GITEA_ADMIN_USER="$(GITEA_ADMIN_USER)" \
+		GITEA_ADMIN_PASS="$(GITEA_ADMIN_PASS)" KUBECTL="$(KUBECTL)" \
+		"$(BASE)/scripts/gitea-api.sh" /user/keys; \
 	fi; \
 	\
 	echo "--> GITEA: Ensuring $(GITEA_SSH_HOST) is in ~/.ssh/known_hosts"; \

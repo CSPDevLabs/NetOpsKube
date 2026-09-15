@@ -24,7 +24,7 @@ DIA_REPO_URL = ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_DIA_REPO).
 try-nok-dia: install-dia-pkg gitops-dia-kustomization portal-enable-dia annotate-auth-ingress-dia annotate-auth-ingress-gitea  ## Deploy the DIA solution
 
 .PHONY: gitops-dia-kustomization
-gitops-dia-kustomization: gitea-create-dia-repo gitea-create-grafana-dashboards-repo flux-create-dia-secret flux-create-dia-source push-dia-manifests push-dia-grafana-dashboards create-dia-kustomizations ## Synchronize DIA manifests with Flux
+gitops-dia-kustomization: gitea-create-dia-repo gitea-create-grafana-dashboards-repo flux-create-dia-secret push-dia-manifests push-dia-grafana-dashboards flux-create-dia-source create-dia-kustomizations ## Synchronize DIA manifests with Flux
 	@echo "--> GITOPS: DIA repo in sync by Flux"
 
 .PHONY: deploy-clab-dia
@@ -82,7 +82,7 @@ flux-create-dia-secret: ## Create the Flux Git authentication secret for DIA
 	fi
 
 .PHONY: flux-create-dia-source
-flux-create-dia-source: ## Create the Flux GitRepository source for DIA
+flux-create-dia-source: ## Create the Flux GitRepository source for DIA (after manifests are pushed)
 	@echo "--> FLUX: Ensuring GitRepository source $(FLUX_DIA_REPO) exists"
 	@if ! $(KUBECTL) get gitrepository $(FLUX_DIA_REPO) -n flux-system > /dev/null 2>&1; then \
 		echo "Creating GitRepository source $(FLUX_DIA_REPO)..."; \
@@ -91,10 +91,13 @@ flux-create-dia-source: ## Create the Flux GitRepository source for DIA
 		  --branch=$(FLUX_GIT_BRANCH) \
 		  --secret-ref=$(FLUX_DIA_SECRET) \
 		  --interval=1m \
-		  --namespace=flux-system; \
+		  --namespace=flux-system \
+		  --wait=false; \
 	else \
 		echo "GitRepository source $(FLUX_DIA_REPO) already exists."; \
-	fi	
+	fi
+	@echo "--> FLUX: Reconciling GitRepository $(FLUX_DIA_REPO) (timeout 10m)"
+	@$(FLUX) reconcile source git $(FLUX_DIA_REPO) -n flux-system --timeout=10m
 
 .PHONY: push-dia-manifests
 push-dia-manifests: stage-dia-manifests ## Push the DIA manifests snapshot to the Gitea repository
@@ -152,6 +155,6 @@ create-dia-kustomizations: ## Create Flux Kustomizations for DIA manifests
 portal-enable-dia: ## Enable the DIA solution in the NetOpsKube Portal
 	@echo "--> PORTAL: Enabling DIA menu"
 	@$(KUBECTL) get configmap nok-apps-menu-config -n nok-base -o json | \
-	jq '.data["menu-config.json"] |= (fromjson | .solutions |= map(if .id == "nok-dia" then .deployed = "yes" else . end) | tojson)' | \
+	jq '.data["menu-config.json"] |= (fromjson | .featured |= map(. + {"openInNewTab": false}) | .solutions |= map(if .id == "nok-dia" then .deployed = "yes" | .services |= map(. + {"openInNewTab": false}) else . end) | tojson)' | \
 	$(KUBECTL) apply -f -
 	@$(KUBECTL) rollout restart deployment/nok-apps-portal-app -n nok-base
