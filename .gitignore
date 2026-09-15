@@ -31,3 +31,14 @@ srsim-lic-25.txt
 
 # Python
 .venv/
+
+# Local workspace / monorepo parent (never commit presentations, ADRs, or draft notes)
+workspace/
+**/workspace/
+*slides*.md
+*presentation*.md
+*demo*.html
+**/ADR/
+**/adr/
+COMPLETED-WORK-*.md
+pr-description-*.md
