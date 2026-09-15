@@ -38,6 +38,7 @@ clone-keycloak-repo: ## Clone the Keycloak authentication repository
 deploy-auth: ## Deploy Keycloak, PostgreSQL, and OAuth2 Proxy
 	@echo "--> AUTH: Configure nok-portal-auth"
 
+	@$(KUBECTL) apply -f $(KEYCLOAK_DIR)/keycloak-proxy-headers.yaml
 	@$(KUBECTL) apply -f $(KEYCLOAK_DIR)/postgres-secret.yaml
 	@$(KUBECTL) apply -f $(KEYCLOAK_DIR)/postgres-service.yaml
 	@$(KUBECTL) apply -f $(KEYCLOAK_DIR)/postgres-statefulset.yaml
@@ -59,7 +60,7 @@ deploy-auth: ## Deploy Keycloak, PostgreSQL, and OAuth2 Proxy
 portal-enable-keycloak: ## Enable Keycloak in the NetOpsKube Portal
 	@echo "--> PORTAL: Enabling Keycloak menu"
 	@$(KUBECTL) get configmap nok-apps-menu-config -n nok-base -o json | \
-	jq '.data["menu-config.json"] |= (fromjson | .featured |= map(if .name == "Keycloak" then . + {"deployed":"yes"} else . end) | tojson)' | \
+	jq '.data["menu-config.json"] |= (fromjson | .featured |= map(if .name == "Keycloak" then . + {"deployed":"yes","path":"/auth/admin/master/console/","openInNewTab":false} elif .name == "BBM" then . + {"openInNewTab":false,"path":"/bbm/dashboards"} else . + {"openInNewTab":false} end) | tojson)' | \
 	$(KUBECTL) apply -f -
 	@$(KUBECTL) rollout restart deployment/nok-apps-portal-app -n nok-base
 
