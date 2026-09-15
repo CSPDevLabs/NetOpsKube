@@ -484,6 +484,27 @@ A default user is automatically created when the `netopskube` Keycloak realm is 
 
 <details>
 
+<summary><strong>Deploy options (SDCIO, tuning, Grafana)</strong></summary>
+
+Optional components and observability tuning are controlled via Makefile variables. See [docs/DEPLOY-OPTIONS.md](docs/DEPLOY-OPTIONS.md).
+
+```bash
+# Observability without SDCIO
+make SDCIO_ENABLED=NO try-nok-bng
+
+# Prometheus / gNMIc tuning
+make PROM_RETENTION=7d GNMIC_REPLICAS=2 try-nok-bng
+
+# Grafana dashboards from in-cluster Gitea (default)
+make gitops-bng-kustomization
+```
+
+</details>
+
+---
+
+<details>
+
 <summary><strong>Proxy Configuration</strong></summary>
 
 In corporate or restricted environments where direct outbound internet access is not available, NetOpsKube supports HTTP/HTTPS proxy configuration for workloads that require external network access.

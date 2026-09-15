@@ -1,0 +1,23 @@
+apiVersion: grafana.integreatly.org/v1beta1
+kind: Grafana
+metadata:
+  name: bbm-grafana
+  namespace: nok-bbm
+  labels:
+    dashboards: bbm
+spec:
+  config:
+    security:
+      allow_embedding: "true"
+    server:
+      root_url: "http://bng.nok.local:8080/bbm/"
+      serve_from_sub_path: "false"
+  deployment:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: grafana
+              env:
+                - name: GF_SECURITY_ALLOW_EMBEDDING
+                  value: "true"
