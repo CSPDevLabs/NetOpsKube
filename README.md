@@ -1,28 +1,93 @@
-# NetOpsKube - NetOps Kubernetes Project
+<p align="center">
+  <img src="docs/img/banner.png" width="100%">
+</p>
 
-NetOpsKube is a collaborative open-source project that provides a Kubernetes-based platform for deploying and managing network applications and services. It establishes a foundational platform with integrated observability, GitOps, network automation, and configuration management capabilities. The platform integrates tools such as Grafana, Prometheus, gNMIc, Gitea, Flux, Containerlab, and SDCIO (Kubenet), and provides a common foundation for deploying network solutions such as BNG and DIA.
+NetOpsKube is a collaborative open-source project that provides a Kubernetes-based platform for deploying and managing network applications and services. It establishes a foundational platform with integrated observability, GitOps, network automation, and configuration management capabilities. The platform integrates tools such as Grafana, Prometheus, gNMIc, Gitea, Flux, Containerlab, and SDCIO (Kubenet), and provides a common foundation for deploying network solutions such as BNG, Direct Internet Access (DIA), CG-NAT and other network solutions.
 
 ---
 
-<details>
+## Key Features
 
-<summary><strong>Key Advantages</strong></summary>
+NetOpsKube combines open-source network automation recipes with time-boxed Nokia consultancy to help customers move from an initial deployment to a running NetOps platform in days.
 
-- **Simplified Access:** Provides unified access to applications through a single portal, supporting both visualization and API interactions.
+<p align="center">
+  <img src="docs/img/architecture.png" width="800">
+</p>
 
-- **Robust Lifecycle Management:** Offers close control over the lifecycle of releases and deployed use cases.
+### **Light & in Control**
 
-- **Production Readiness:** Ensures high resilience and production readiness through multi-replica application deployments and exposed services.
+- **Live network on Day 1**
+- Runs on **Kubernetes (K8s)** with a small footprint
+- Designed to minimize the need for a dedicated platform team
+- **You own the code** — no fees and no lock-in
+- Built using proven open-source technologies, including **gNMIc** and **Containerlab**
 
-- **Unified Security:** Implements consistent security and access control mechanisms across all components.
+### **One Platform · One Portal**
 
-- **Flexibility:** Its fully open-source nature allows for extensive modification and adaptation to diverse network environments.
+NetOpsKube provides a common platform and unified portal for network observability, configuration, and automation.
 
-- **Portability:** Leverages Kubernetes to provide enhanced portability across different infrastructures.
+- **Alerts & Telemetry built-in** through Prometheus, gNMIc and related observability components
+- **Dashboards & visualization** through Grafana
+- **Logs and event visibility** through Loki
+- **Configuration as Code** using Gitea and SDCIO
+- **GitOps lifecycle management** using FluxCD
+- **Network simulation and validation** is helping to start with reference Digital Twin topologies using Containerlab
+- **Intents and network applications** exposed through a unified portal
 
-- **CI/CD Integration:** Facilitates seamless CI/CD workflows by utilizing the Kubernetes ecosystem and GitOps repositories as the single source of truth.
+### **Grows with You**
 
-</details>
+- Your team is **operating the platform from Day 1**, Nokia will help you to get started with the platform and the network use cases
+- Start with one network use case and extend using the **same Kubernetes and GitOps foundation**
+- Extend with other network solutions using the **same platform and GitOps foundation**
+- Build a **strong data foundation for AIOps-ready capabilities**
+
+### **Need support from Nokia?**
+
+- Just open an issue and we will help you to get started with the platform and the network use cases
+- Need more support? We can provide a production-oriented deployment in **~5 days** with **Nokia EAC Consultancy**
+- We are inviting for co-development and co-operation on the project and the network use cases - we are looking for new network use cases and recipes to add to the project! Open an issue and let's discuss it!
+
+---
+
+## Quick Setup
+
+Get a complete NetOpsKube environment running in a few commands.
+
+<p align="center">
+  <img src="docs/img/qs.png" width="100%">
+</p>
+
+### BNG
+
+```bash
+git clone https://github.com/CSPDevLabs/NetOpsKube
+cd NetOpsKube
+
+sudo make deploy-clab-bng
+make try-nok
+make try-nok-bng
+```
+
+### DIA
+
+```bash
+git clone https://github.com/CSPDevLabs/NetOpsKube
+cd NetOpsKube
+
+sudo make deploy-clab-dia
+make try-nok
+make try-nok-dia
+```
+
+That's it. The common NetOpsKube platform is deployed once, and the required solution is then onboarded on top of it.
+
+<p align="center">
+  <img src="docs/img/dashboard-01.png" width="800">
+</p>
+
+After deployment, access the NetOpsKube portal and explore the deployed solution.
+
+> **Tip:** For a combined BNG + DIA environment, deploy both Containerlab topologies first, then run `make try-nok` once followed by `make try-nok-bng` and `make try-nok-dia`.
 
 ---
 
@@ -54,6 +119,8 @@ To successfully run these Makefile targets, the following general requirements m
 
   A valid Nokia SROS license file must be present at the path specified by `SRSIM_LICENSE_FILE` (default: `$(NOK_CLABS_DIR)/nok-bng/srsim-lic-25.txt` or `$(NOK_CLABS_DIR)/nok-dia/srsim-lic-25.txt`).
 
+> **Important:** Router container images might require vendor approval in advance.
+
 - **IP Segments:**
   - Kind picks its Docker network at runtime (for example, `172.18.0.0/24` or `172.19.0.0/16`).
   - MetalLB and LoadBalancer IPs in `nok-kpt` are templated on `172.18.0.x` and **auto-patched** by `make cluster-up` to match the Kind node prefix.
@@ -62,123 +129,6 @@ To successfully run these Makefile targets, the following general requirements m
   - Containerlab BNG network: `172.21.20.0/24`
 
 Containerlab uses a separate Docker network from the Kubernetes Kind network.
-
-</details>
-
----
-
-<details>
-
-<summary><strong>Makefile targets</strong></summary>
-
-
-### Introduction to Makefile
-
-The NOK Makefile automates the setup of a local Kubernetes environment using Kind, manages necessary command-line tools, clones Git repositories, and deploys Kubernetes applications via KPT, including integration with Containerlab. It serves as a comprehensive automation script for setting up a development and testing environment centered around Kubernetes and network emulation.
-
-It streamlines:
-
-- Required tool installation
-- Kind cluster provisioning
-- Git repository management
-- Kubernetes package deployment using KPT
-- Gitea and Flux GitOps initialization
-- Containerlab topology deployment
-- Solution-specific onboarding
-- Service exposure and access
-
-### High-Level Functionality
-
-The Makefile orchestrates several key areas:
-
-- **Tool Management:** Automatically downloads, installs, and manages versions of essential command-line tools such as kind, kubectl, helm, kpt, yq, k9s, gh, and containerlab into a dedicated `tools/` directory.
-
-- **Kubernetes Cluster Lifecycle:** Provides targets to create, configure, and delete a local Kubernetes cluster using Kind, including dynamic configuration of API server addresses and port mappings.
-
-- **Git Repository Management:** Handles cloning of required Git repositories such as `CSPDevLabs/kpt` and `CSPDevLabs/nok-clabs`.
-
-- **KPT Package Deployment:** Defines macros to simplify deployment and reconciliation of Kubernetes resource packages using `kpt live apply`.
-
-- **GitOps Management:** Deploys the shared Gitea instance and bootstraps Flux during the common platform setup. BNG and DIA then create and synchronize their own solution-specific GitOps repositories and Flux Kustomizations.
-
-- **Containerlab Integration:** Provides targets to deploy and destroy network topologies defined in Containerlab, specifically for Nokia BNG and DIA environments.
-
-- **Service Exposure:** Includes mechanisms to port-forward the ingress controller service, making applications accessible from the host machine.
-
-
-### Key Targets
-
-The Makefile separates responsibilities into three deployment layers:
-
-```text
-Containerlab
-     │
-     ▼
-Base Platform
-     │
-     ▼
-Solution
- ┌───┴───┐
- ▼       ▼
-BNG     DIA
-```
-
-### Containerlab
-
-#### `make deploy-clab-bng`
-
-Deploys the Nokia BNG Containerlab topology.
-
-```bash
-sudo make deploy-clab-bng
-```
-
-#### `make deploy-clab-dia`
-
-Deploys the DIA Containerlab topology.
-
-```bash
-sudo make deploy-clab-dia
-```
-
-### Base Platform
-
-#### `make try-nok`
-
-Sets up the common NetOpsKube platform.
-
-This includes:
-
-- Kind Kubernetes cluster
-- Base Kubernetes packages
-- Load Balancer
-- Prometheus Operator
-- gNMIc Operator
-- BBM package
-- Ingress
-- Shared Gitea GitOps service
-- Flux GitOps bootstrap
-- Authentication configuration
-
-This target is **solution-independent**.
-
-### BNG Solution
-
-#### `make try-nok-bng`
-
-Onboards the Nokia BNG solution onto the already deployed NetOpsKube platform.
-
-This target configures the BNG-specific Kubernetes, GitOps, portal, and authentication resources.
-
-### DIA Solution
-
-#### `make try-nok-dia`
-
-Onboards the DIA solution onto the already deployed NetOpsKube platform.
-
-This target configures the DIA-specific Kubernetes, GitOps, Grafana dashboard, portal, and authentication resources.
-
-
 
 </details>
 
