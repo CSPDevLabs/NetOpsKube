@@ -2,7 +2,7 @@
   <img src="docs/img/banner.png" width="100%">
 </p>
 
-NetOpsKube is a collaborative open-source project that provides a Kubernetes-based platform for deploying and managing network applications and services. It establishes a foundational platform with integrated observability, GitOps, network automation, and configuration management capabilities. The platform integrates tools such as Grafana, Prometheus, gNMIc, Gitea, Flux, Containerlab, and SDCIO (Kubenet), and provides a common foundation for deploying network solutions such as BNG and DIA.
+NetOpsKube is a collaborative open-source project that provides a Kubernetes-based platform for deploying and managing network applications and services. It establishes a foundational platform with integrated observability, GitOps, network automation, and configuration management capabilities. The platform integrates tools such as Grafana, Prometheus, gNMIc, Gitea, Flux, Containerlab, and SDCIO (Kubenet), and provides a common foundation for deploying network solutions such as BNG, Direct Internet Access (DIA), CG-NAT and other network solutions.
 
 ---
 
@@ -14,39 +14,38 @@ NetOpsKube combines open-source network automation recipes with time-boxed Nokia
   <img src="docs/img/architecture.png" width="800">
 </p>
 
-### **Value in Days**
-
-- **Live network on Day 1** · production-oriented deployment in **~5 days**
-- **Dashboards, alerts & telemetry built-in**
-- **Fixed-price packages** for deployments of up to **30 network elements**, with à la carte consulting days available
-- Open-source NetOpsKube recipes combined with **time-boxed Nokia consultancy**
-
 ### **Light & in Control**
 
+- **Live network on Day 1**
 - Runs on **Kubernetes (K8s)** with a small footprint
 - Designed to minimize the need for a dedicated platform team
 - **You own the code** — no fees and no lock-in
 - Built using proven open-source technologies, including **gNMIc** and **Containerlab**
-- **OSS community + Nokia consultancy** for implementation, enablement, and support
 
 ### **One Platform · One Portal**
 
 NetOpsKube provides a common platform and unified portal for network observability, configuration, and automation.
 
-- **Telemetry** through Prometheus, gNMIc and related observability components
+- **Alerts & Telemetry built-in** through Prometheus, gNMIc and related observability components
 - **Dashboards & visualization** through Grafana
 - **Logs and event visibility** through Loki
 - **Configuration as Code** using Gitea and SDCIO
 - **GitOps lifecycle management** using FluxCD
-- **Network simulation and validation** using Containerlab
+- **Network simulation and validation** is helping to start with reference Digital Twin topologies using Containerlab
 - **Intents and network applications** exposed through a unified portal
 
 ### **Grows with You**
 
-- Your team is **trained to operate the platform from Day 1**
+- Your team is **operating the platform from Day 1**, Nokia will help you to get started with the platform and the network use cases
 - Start with one network use case and extend using the **same Kubernetes and GitOps foundation**
-- Extend to **DIA · CGNAT · Peering** and other network solutions using the same pipeline
-- Build a **strong data foundation for AIOps-ready capabilities, including MCP-based workflows**
+- Extend with other network solutions using the **same platform and GitOps foundation**
+- Build a **strong data foundation for AIOps-ready capabilities**
+
+### **Need support from Nokia?**
+
+- Just open an issue and we will help you to get started with the platform and the network use cases
+- Need more support? We can provide a production-oriented deployment in **~5 days** with **Nokia EAC Consultancy**
+- We are inviting for co-development and co-operation on the project and the network use cases - we are looking for new network use cases and recipes to add to the project! Open an issue and let's discuss it!
 
 ---
 
