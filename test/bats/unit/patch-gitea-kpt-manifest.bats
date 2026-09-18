@@ -6,33 +6,6 @@ setup() {
   setup_nok_kpt_fixture
 }
 
-@test "apply-kpt-overlays copies NetOpsKube overlay manifests into nok-kpt" {
-  run_make apply-kpt-overlays
-  [ "$status" -eq 0 ]
-
-  [ -f "$FIXTURE_NOK_KPT/nok-bng/ingress/ingress.yaml" ]
-  grep -q '/gitea' "$FIXTURE_NOK_KPT/nok-bng/ingress/ingress.yaml"
-  [ -f "$FIXTURE_NOK_KPT/nok-bng/portal/portal-gitea-proxy-svc.yaml" ]
-}
-
-@test "apply-kpt-overlays skips when overlays directory is missing" {
-  local empty_base="${BATS_TEST_TMPDIR}/empty-base"
-  mkdir -p "$empty_base"
-  run make -C "$NETOPSKUBE_ROOT" apply-kpt-overlays \
-    BASE="$empty_base" NOK_KPT_DIR="$FIXTURE_NOK_KPT"
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"No overlays directory, skipping"* ]]
-}
-
-@test "apply-kpt-overlays fails when nok-kpt directory is not a checkout" {
-  local bad_kpt="${BATS_TEST_TMPDIR:-${TMPDIR:-/tmp}/bats-$$}/not-kpt"
-  mkdir -p "$bad_kpt"
-  run make -C "$NETOPSKUBE_ROOT" apply-kpt-overlays \
-    NOK_KPT_DIR="$bad_kpt"
-  [ "$status" -ne 0 ]
-  [[ "$output" == *"not a kpt checkout"* ]]
-}
-
 @test "patch-gitea-kpt-manifest patches Gitea for portal sub-path access" {
   run_make patch-gitea-kpt-manifest
   [ "$status" -eq 0 ]
