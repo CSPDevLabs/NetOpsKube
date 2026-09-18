@@ -84,18 +84,6 @@ generate-portal-pv: ## Synchronize portal files into the KinD control-plane node
 	@docker cp $(NOK_KPT_DIR)/nok-base/portal $(KIND_CLUSTER_NAME)-control-plane:/portal
 	@echo "--> PORTAL: Portal files synchronized"
 
-.PHONY: apply-kpt-overlays
-apply-kpt-overlays: git-clone-kpt ## Apply NetOpsKube overlays on top of cloned nok-kpt packages
-	@if [ ! -d "$(BASE)/overlays" ]; then \
-		echo "--> OVERLAY: No overlays directory, skipping" ;\
-	elif [ ! -f "$(NOK_KPT_DIR)/nok-base/Kptfile" ]; then \
-		echo "Error: $(NOK_KPT_DIR) is not a kpt checkout — run 'make git-clone-kpt' first" ;\
-		exit 1 ;\
-	else \
-		echo "--> OVERLAY: Applying NetOpsKube overlays to $(NOK_KPT_DIR)" ;\
-		cp -r $(BASE)/overlays/. $(NOK_KPT_DIR)/ ;\
-	fi
-
 .PHONY: patch-gitea-kpt-manifest
 patch-gitea-kpt-manifest: git-clone-kpt ## Patch Gitea kpt manifest for KinD (URLs, subpath, image registry)
 	@GITEA_MANIFEST="$(NOK_KPT_DIR)/nok-git/gitea/gitea-manifest-standalone.yaml" ; \
@@ -366,7 +354,7 @@ wait-for-metallb-ready: ## Wait for the Kubernetes Metallb node to be ready
 	}	
 
 .PHONY: install-bbm-pkg
-install-bbm-pkg: update-kpt-tuning-setters apply-kpt-overlays ## Installs the BBM (self-monitoring and observability) kpt package from ./nok-kpt/nok-bbm
+install-bbm-pkg: update-kpt-tuning-setters ## Installs the BBM (self-monitoring and observability) kpt package from ./nok-kpt/nok-bbm
 	@echo "--> INSTALL: [\033[1;34mBBM\033[0m] - Applying kpt package with setters"
 	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-bbm,nok-bbm,"--reconcile-timeout=5m", "--inventory-policy=adopt")
 
