@@ -10,10 +10,6 @@ update-kpt-lb-setters fails when nok-kpt directory is not a checkout
 show-kind-lb-setters prints detected prefix and apply-setters values
 show-kind-lb-setters fails when KinD prefix is empty
 
-apply-kpt-overlays copies NetOpsKube overlay manifests into nok-kpt
-apply-kpt-overlays skips when overlays directory is missing
-apply-kpt-overlays fails when nok-kpt directory is not a checkout
-
 patch-gitea-kpt-manifest patches Gitea for portal sub-path access
 patch-gitea-kpt-manifest removes standalone Gitea ingress manifest
 patch-gitea-kpt-manifest is idempotent for Gitea sub-path settings
