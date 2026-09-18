@@ -50,7 +50,7 @@ destroy-clab-cgnat: check-tools git-clone-clab ## Destroys the Containerlab CG-N
 	
 
 .PHONY: install-cgnat-pkg
-install-cgnat-pkg: check-tools git-clone-kpt apply-kpt-overlays configure-sdcio-kpt ## Installs the CG-NAT kpt package from ./nok-kpt/nok-cgnat
+install-cgnat-pkg: check-tools git-clone-kpt configure-sdcio-kpt ## Installs the CG-NAT kpt package from ./nok-kpt/nok-cgnat
 	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-cgnat,nok-cgnat,"--reconcile-timeout=5m", "--inventory-policy=adopt")
 
 .PHONY: gitea-create-cgnat-repo

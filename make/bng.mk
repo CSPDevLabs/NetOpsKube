@@ -50,7 +50,7 @@ destroy-clab-bng: check-tools git-clone-clab ## Destroys the Containerlab BNG to
 	
 
 .PHONY: install-bng-pkg
-install-bng-pkg: check-tools git-clone-kpt apply-kpt-overlays configure-sdcio-kpt ## Installs the BNG kpt package from ./nok-kpt/nok-bng
+install-bng-pkg: check-tools git-clone-kpt configure-sdcio-kpt ## Installs the BNG kpt package from ./nok-kpt/nok-bng
 	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-bng,nok-bng,"--reconcile-timeout=5m", "--inventory-policy=adopt")
 
 .PHONY: gitea-create-bng-repo
