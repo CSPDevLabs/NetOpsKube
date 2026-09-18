@@ -29,7 +29,7 @@ setup_nok_kpt_fixture() {
   mkdir -p "$FIXTURE_NOK_KPT"
 
   local pkg
-  for pkg in nok-base nok-bng nok-dia nok-git nok-lb nok-bbm; do
+  for pkg in nok-base nok-bng nok-dia nok-cgnat nok-git nok-lb nok-bbm; do
     if [[ -d "${kpt_root}/${pkg}" ]]; then
       cp -a "${kpt_root}/${pkg}" "$FIXTURE_NOK_KPT/"
     fi

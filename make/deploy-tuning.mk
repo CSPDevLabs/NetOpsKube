@@ -28,6 +28,7 @@ GRAFANA_DASHBOARD_UPSTREAM_BASE ?= https://raw.githubusercontent.com/CSPDevLabs/
 FLUX_GRAFANA_REPO ?= grafana-dashboards
 BNG_GRAFANA_REPO_PREFIX ?= bng
 DIA_GRAFANA_REPO_PREFIX ?= dia
+CGNAT_GRAFANA_REPO_PREFIX ?= cgnat
 GRAFANA_DASHBOARDS_STAGING ?= $(BASE)/build/grafana-dashboards-staging
 
 STAGE_RECIPE_SCRIPT := $(BASE)/scripts/stage-recipe-manifests.sh
@@ -47,10 +48,11 @@ ifeq ($(SDCIO_ENABLED_BOOL),1)
 	@echo "--> SDCIO: enabled (platform + recipe exporters)"
 	@rm -f $(NOK_KPT_DIR)/nok-base/sdcio/.krmignore \
 		$(NOK_KPT_DIR)/nok-bng/ndt-sdcio-visual/.krmignore \
-		$(NOK_KPT_DIR)/nok-dia/ndt-sdcio-visual/.krmignore
+		$(NOK_KPT_DIR)/nok-dia/ndt-sdcio-visual/.krmignore \
+		$(NOK_KPT_DIR)/nok-cgnat/ndt-sdcio-visual/.krmignore
 else
 	@echo "--> SDCIO: disabled — excluding SDCIO from kpt apply"
-	@for dir in nok-base/sdcio nok-bng/ndt-sdcio-visual nok-dia/ndt-sdcio-visual; do \
+	@for dir in nok-base/sdcio nok-bng/ndt-sdcio-visual nok-dia/ndt-sdcio-visual nok-cgnat/ndt-sdcio-visual; do \
 		if [ -d "$(NOK_KPT_DIR)/$$dir" ]; then \
 			echo "*" > "$(NOK_KPT_DIR)/$$dir/.krmignore" ; \
 		fi ; \
@@ -76,7 +78,7 @@ define SDCIO_SKIP_DIR
 $(if $(filter 1,$(SDCIO_ENABLED_BOOL)),,$(filter $(1),$(SDCIO_FLUX_SKIP_DIRS)))
 endef
 
-.PHONY: stage-bng-manifests stage-dia-manifests
+.PHONY: stage-bng-manifests stage-dia-manifests stage-cgnat-manifests
 stage-bng-manifests: $(YQ) ## Stage BNG manifests (copy, tune, patch Grafana URLs)
 	@STAGING_DIR="$(BASE)/build/bng-manifests-staging" \
 		SRC_DIR="$(BNG_MANIFESTS_DIR)" \
@@ -115,7 +117,26 @@ stage-dia-manifests: $(YQ) ## Stage DIA manifests (copy, tune, patch Grafana URL
 		GRAFANA_DASHBOARD_UPSTREAM_BASE="$(GRAFANA_DASHBOARD_UPSTREAM_BASE)" \
 		bash "$(STAGE_RECIPE_SCRIPT)"
 
-.PHONY: push-bng-grafana-dashboards push-dia-grafana-dashboards push-grafana-dashboards
+stage-cgnat-manifests: $(YQ) ## Stage CG-NAT manifests (copy, tune, patch Grafana URLs)
+	@STAGING_DIR="$(BASE)/build/cgnat-manifests-staging" \
+		SRC_DIR="$(CGNAT_MANIFESTS_DIR)" \
+		RECIPE_LABEL="nok-cgnat" \
+		GRAFANA_PREFIX="$(CGNAT_GRAFANA_REPO_PREFIX)" \
+		YQ="$(YQ)" \
+		PROM_RETENTION="$(PROM_RETENTION)" \
+		PROM_RETENTION_SIZE="$(PROM_RETENTION_SIZE)" \
+		PROM_STORAGE_SIZE="$(PROM_STORAGE_SIZE)" \
+		GNMIC_REPLICAS="$(GNMIC_REPLICAS)" \
+		GNMIC_CPU_REQUEST="$(GNMIC_CPU_REQUEST)" \
+		GNMIC_MEMORY_REQUEST="$(GNMIC_MEMORY_REQUEST)" \
+		GNMIC_CPU_LIMIT="$(GNMIC_CPU_LIMIT)" \
+		GNMIC_MEMORY_LIMIT="$(GNMIC_MEMORY_LIMIT)" \
+		GRAFANA_DASHBOARD_SOURCE="$(GRAFANA_DASHBOARD_SOURCE)" \
+		GRAFANA_DASHBOARD_GITEA_BASE="$(GRAFANA_DASHBOARD_GITEA_BASE)" \
+		GRAFANA_DASHBOARD_UPSTREAM_BASE="$(GRAFANA_DASHBOARD_UPSTREAM_BASE)" \
+		bash "$(STAGE_RECIPE_SCRIPT)"
+
+.PHONY: push-bng-grafana-dashboards push-dia-grafana-dashboards push-cgnat-grafana-dashboards push-grafana-dashboards
 push-bng-grafana-dashboards: ## Push BNG Grafana JSON to in-cluster Gitea repo
 	@GRAFANA_DASHBOARDS_STAGING="$(GRAFANA_DASHBOARDS_STAGING)" \
 		FLUX_GRAFANA_REPO="$(FLUX_GRAFANA_REPO)" \
@@ -126,6 +147,7 @@ push-bng-grafana-dashboards: ## Push BNG Grafana JSON to in-cluster Gitea repo
 		NOK_CLABS_DIR="$(NOK_CLABS_DIR)" \
 		BNG_GRAFANA_REPO_PREFIX="$(BNG_GRAFANA_REPO_PREFIX)" \
 		DIA_GRAFANA_REPO_PREFIX="$(DIA_GRAFANA_REPO_PREFIX)" \
+		CGNAT_GRAFANA_REPO_PREFIX="$(CGNAT_GRAFANA_REPO_PREFIX)" \
 		bash "$(PUSH_GRAFANA_SCRIPT)" bng
 
 push-dia-grafana-dashboards: ## Push DIA Grafana JSON to in-cluster Gitea repo
@@ -138,19 +160,33 @@ push-dia-grafana-dashboards: ## Push DIA Grafana JSON to in-cluster Gitea repo
 		NOK_CLABS_DIR="$(NOK_CLABS_DIR)" \
 		BNG_GRAFANA_REPO_PREFIX="$(BNG_GRAFANA_REPO_PREFIX)" \
 		DIA_GRAFANA_REPO_PREFIX="$(DIA_GRAFANA_REPO_PREFIX)" \
+		CGNAT_GRAFANA_REPO_PREFIX="$(CGNAT_GRAFANA_REPO_PREFIX)" \
 		bash "$(PUSH_GRAFANA_SCRIPT)" dia
 
-push-grafana-dashboards: push-bng-grafana-dashboards push-dia-grafana-dashboards ## Push BNG + DIA Grafana JSON (both recipes)
+push-cgnat-grafana-dashboards: ## Push CG-NAT Grafana JSON to in-cluster Gitea repo
+	@GRAFANA_DASHBOARDS_STAGING="$(GRAFANA_DASHBOARDS_STAGING)" \
+		FLUX_GRAFANA_REPO="$(FLUX_GRAFANA_REPO)" \
+		FLUX_GIT_BRANCH="$(FLUX_GIT_BRANCH)" \
+		GITEA_SSH_HOST="$(GITEA_SSH_HOST)" \
+		GITEA_ADMIN_USER="$(GITEA_ADMIN_USER)" \
+		FLUX_SSH_KEY="$(FLUX_SSH_KEY)" \
+		NOK_CLABS_DIR="$(NOK_CLABS_DIR)" \
+		BNG_GRAFANA_REPO_PREFIX="$(BNG_GRAFANA_REPO_PREFIX)" \
+		DIA_GRAFANA_REPO_PREFIX="$(DIA_GRAFANA_REPO_PREFIX)" \
+		CGNAT_GRAFANA_REPO_PREFIX="$(CGNAT_GRAFANA_REPO_PREFIX)" \
+		bash "$(PUSH_GRAFANA_SCRIPT)" cgnat
+
+push-grafana-dashboards: push-bng-grafana-dashboards push-dia-grafana-dashboards push-cgnat-grafana-dashboards ## Push recipe Grafana JSON
 
 .PHONY: gitea-create-grafana-dashboards-repo
-gitea-create-grafana-dashboards-repo: wait-for-gitea-ready ## Ensure grafana-dashboards Gitea repo exists (BNG + DIA)
+gitea-create-grafana-dashboards-repo: wait-for-gitea-ready ## Ensure grafana-dashboards Gitea repo exists (BNG + DIA + CG-NAT)
 	@echo "--> GITEA: Ensuring repo $(FLUX_GRAFANA_REPO) exists"
 	@GITOPS_NAMESPACE="$(GITOPS_NAMESPACE)" GITEA_ADMIN_USER="$(GITEA_ADMIN_USER)" \
 		GITEA_ADMIN_PASS="$(GITEA_ADMIN_PASS)" KUBECTL="$(KUBECTL)" \
 		"$(BASE)/scripts/gitea-api.sh" "/repos/$(GITEA_ADMIN_USER)/$(FLUX_GRAFANA_REPO)" \
 		>/dev/null || \
 	GITEA_API_METHOD=POST \
-		GITEA_API_DATA='{"name":"$(FLUX_GRAFANA_REPO)", "description": "NetOpsKube Grafana dashboards (BNG + DIA)","private":false,"auto_init":true}' \
+		GITEA_API_DATA='{"name":"$(FLUX_GRAFANA_REPO)", "description": "NetOpsKube Grafana dashboards (BNG + DIA + CG-NAT)","private":false,"auto_init":true}' \
 		GITOPS_NAMESPACE="$(GITOPS_NAMESPACE)" GITEA_ADMIN_USER="$(GITEA_ADMIN_USER)" \
 		GITEA_ADMIN_PASS="$(GITEA_ADMIN_PASS)" KUBECTL="$(KUBECTL)" \
 		"$(BASE)/scripts/gitea-api.sh" /user/repos

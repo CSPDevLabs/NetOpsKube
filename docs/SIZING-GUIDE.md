@@ -47,7 +47,7 @@ BBM scrapes platform health (ingress, gNMIc reachability, node ping). Scale stor
 
 ---
 
-## Per recipe (BNG or DIA — `make try-nok-bng` / `try-nok-dia`)
+## Per recipe (BNG, DIA, or CG-NAT — `make try-nok-bng` / `try-nok-dia` / `try-nok-cgnat`)
 
 ### Observability core
 
@@ -73,6 +73,11 @@ BBM scrapes platform health (ingress, gNMIc reachability, node ping). Scale stor
 | `dia-metrics` | **1** | 0.46.0 | Telemetry |
 | `dia-state` | **1** | 0.46.0 | State |
 | `dia-core-metrics` | **1** | 0.46.0 | Core metrics |
+
+| Cluster (CG-NAT) | Replicas | Image | Purpose |
+|------------------|----------|-------|---------|
+| `cgnat-metrics` | **1** | gnmic:latest | 28-metric CG-NAT set (60 s + 4 min refresh) → Prometheus |
+| `cgnat-state` | **1** | gnmic:latest | Availability / watermark / ICR on-change |
 
 **No CPU/memory limits** are set on collector pods today — plan headroom on the node.
 

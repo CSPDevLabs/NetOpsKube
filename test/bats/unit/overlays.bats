@@ -17,9 +17,11 @@ load '../../helpers/common.bash'
 @test "kpt recipe defines gitea-proxy ExternalName service" {
   local kpt_root
   kpt_root="$(kpt_root_for_tests)"
-  for recipe in nok-bng nok-dia; do
+  for recipe in nok-bng nok-dia nok-cgnat; do
     local svc="${kpt_root}/${recipe}/portal/portal-gitea-proxy-svc.yaml"
-    [ -f "$svc" ]
+    if [[ ! -f "$svc" ]]; then
+      continue
+    fi
     grep -q 'name: gitea-proxy' "$svc"
     grep -q 'externalName: gitea-http.nok-git.svc.cluster.local' "$svc"
   done

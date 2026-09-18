@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Push BNG or DIA Grafana dashboard JSON to in-cluster Gitea (preserves other recipe prefix).
-# Usage: push-grafana-dashboards.sh bng|dia
+# Push recipe Grafana dashboard JSON to in-cluster Gitea (preserves other recipe prefixes).
+# Usage: push-grafana-dashboards.sh bng|dia|cgnat
 set -euo pipefail
 
-RECIPE="${1:?usage: push-grafana-dashboards.sh bng|dia}"
+RECIPE="${1:?usage: push-grafana-dashboards.sh bng|dia|cgnat}"
 
 : "${GRAFANA_DASHBOARDS_STAGING:?GRAFANA_DASHBOARDS_STAGING required}"
 : "${FLUX_GRAFANA_REPO:?FLUX_GRAFANA_REPO required}"
@@ -15,6 +15,7 @@ RECIPE="${1:?usage: push-grafana-dashboards.sh bng|dia}"
 
 BNG_GRAFANA_REPO_PREFIX="${BNG_GRAFANA_REPO_PREFIX:-bng}"
 DIA_GRAFANA_REPO_PREFIX="${DIA_GRAFANA_REPO_PREFIX:-dia}"
+CGNAT_GRAFANA_REPO_PREFIX="${CGNAT_GRAFANA_REPO_PREFIX:-cgnat}"
 
 case "$RECIPE" in
   bng)
@@ -25,8 +26,12 @@ case "$RECIPE" in
     SRC_DIR="${NOK_CLABS_DIR}/nok-dia/grafana-dashboards"
     PREFIX="$DIA_GRAFANA_REPO_PREFIX"
     ;;
+  cgnat)
+    SRC_DIR="${NOK_CLABS_DIR}/nok-cgnat/grafana-dashboards"
+    PREFIX="$CGNAT_GRAFANA_REPO_PREFIX"
+    ;;
   *)
-    echo "ERROR: RECIPE must be bng or dia (got '$RECIPE')" >&2
+    echo "ERROR: RECIPE must be bng, dia, or cgnat (got '$RECIPE')" >&2
     exit 1
     ;;
 esac

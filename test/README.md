@@ -41,12 +41,13 @@ make test-smoke           # verify-lb-ips (cluster required)
 # Per-recipe health (cluster required) — run when you want to validate a deploy
 make verify-recipe-bng
 make verify-recipe-dia
-make test-recipes         # both recipes, install-level
-NOK_RECIPE_VERIFY_LEVEL=full make verify-recipe-bng   # + gNMIc + metrics (needs clab)
+make verify-recipe-cgnat
+make test-recipes         # BNG, DIA, and CG-NAT, install-level
+NOK_RECIPE_VERIFY_LEVEL=full make verify-recipe-cgnat   # + gNMIc + metrics (needs clab)
 
 # Unit-test bundle (no cluster) — see docs/unit-tests.md
 make test-epic9           # unit tests + kpt package validation
-make test-kpt             # kpt BNG/DIA validate only
+make test-kpt             # kpt BNG/DIA/CG-NAT validate only
 ```
 
 ### Install-level vs full-level
@@ -60,13 +61,14 @@ make test-kpt             # kpt BNG/DIA validate only
 | gNMIc subscriptions running | — | yes |
 | gNMIc metrics in Prometheus | — | yes |
 
-**Publish vs verify:** `push-bng-manifests` and `push-dia-manifests` do **not** run recipe verification. GitOps publish assumes the recipe was already tested. Operators and CI run `make verify-recipe-*` or `make test-recipes` when they want a health check.
+**Publish vs verify:** `push-bng-manifests`, `push-dia-manifests`, and `push-cgnat-manifests` do **not** run recipe verification. GitOps publish assumes the recipe was already tested. Operators and CI run `make verify-recipe-*` or `make test-recipes` when they want a health check.
 
 Optional pre-publish gate (opt-in only):
 
 ```bash
 NOK_VERIFY_BEFORE_PUBLISH=yes make verify-before-publish-bng
 NOK_VERIFY_BEFORE_PUBLISH=yes make verify-before-publish-dia
+NOK_VERIFY_BEFORE_PUBLISH=yes make verify-before-publish-cgnat
 ```
 
 Default: `NOK_VERIFY_BEFORE_PUBLISH=no`.

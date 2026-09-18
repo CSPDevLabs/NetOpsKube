@@ -7,7 +7,8 @@
 # Usage:
 #   make verify-recipe-bng
 #   make verify-recipe-dia
-#   make verify-recipe RECIPE=bng NOK_RECIPE_VERIFY_LEVEL=full
+#   make verify-recipe-cgnat
+#   make verify-recipe RECIPE=cgnat NOK_RECIPE_VERIFY_LEVEL=full
 #
 # Optional pre-publish check (not wired to push-*-manifests — run explicitly when desired):
 #   NOK_VERIFY_BEFORE_PUBLISH=yes make verify-before-publish-bng
@@ -27,8 +28,11 @@ ifeq ($(RECIPE),bng)
 else ifeq ($(RECIPE),dia)
   RECIPE_NS := nok-dia
   RECIPE_LABEL := DIA
+else ifeq ($(RECIPE),cgnat)
+  RECIPE_NS := nok-cgnat
+  RECIPE_LABEL := CG-NAT
 else
-  $(error RECIPE must be bng or dia (got '$(RECIPE)'))
+  $(error RECIPE must be bng, dia, or cgnat (got '$(RECIPE)'))
 endif
 
 .PHONY: help-recipe-verify
@@ -36,14 +40,17 @@ help-recipe-verify: ## List per-recipe verification targets
 	@grep -E '^[a-zA-Z0-9_.-]+:.*?## .*$$' make/recipe-verify.mk | sort \
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-35s\033[0m %s\n", $$1, $$2}'
 
-.PHONY: verify-recipe-bng verify-recipe-dia verify-recipe
+.PHONY: verify-recipe-bng verify-recipe-dia verify-recipe-cgnat verify-recipe
 verify-recipe-bng: ## Run install-level checks for the BNG recipe (set NOK_RECIPE_VERIFY_LEVEL=full for metrics)
 	@$(MAKE) verify-recipe RECIPE=bng
 
 verify-recipe-dia: ## Run install-level checks for the DIA recipe (set NOK_RECIPE_VERIFY_LEVEL=full for metrics)
 	@$(MAKE) verify-recipe RECIPE=dia
 
-verify-recipe: check-tools ## Verify recipe health (RECIPE=bng|dia, NOK_RECIPE_VERIFY_LEVEL=install|full)
+verify-recipe-cgnat: ## Run install-level checks for the CG-NAT recipe (set NOK_RECIPE_VERIFY_LEVEL=full for metrics)
+	@$(MAKE) verify-recipe RECIPE=cgnat
+
+verify-recipe: check-tools ## Verify recipe health (RECIPE=bng|dia|cgnat, NOK_RECIPE_VERIFY_LEVEL=install|full)
 	@echo "--> RECIPE [$(RECIPE_LABEL)]: Starting $(NOK_RECIPE_VERIFY_LEVEL)-level verification in namespace '$(RECIPE_NS)'"
 	@$(MAKE) verify-recipe-controller
 	@$(MAKE) verify-recipe-pods RECIPE=$(RECIPE)
@@ -173,7 +180,7 @@ verify-recipe-metrics: $(KUBECTL) ## Verify Prometheus is scraping gNMIc metrics
 	echo "[PASS] Prometheus reports $$SAMPLE_COUNT gNMIc metric series"
 
 # Gate manifest publishing on recipe health (Epic 9 — surface broken recipes before publish)
-.PHONY: verify-before-publish-bng verify-before-publish-dia
+.PHONY: verify-before-publish-bng verify-before-publish-dia verify-before-publish-cgnat
 verify-before-publish-bng:
 	@if [ "$(NOK_VERIFY_BEFORE_PUBLISH)" = "yes" ]; then \
 		$(MAKE) verify-recipe RECIPE=bng NOK_RECIPE_VERIFY_LEVEL=install; \
@@ -186,4 +193,11 @@ verify-before-publish-dia:
 		$(MAKE) verify-recipe RECIPE=dia NOK_RECIPE_VERIFY_LEVEL=install; \
 	else \
 		echo "--> RECIPE [DIA]: Pre-publish verification skipped (set NOK_VERIFY_BEFORE_PUBLISH=yes to enable)"; \
+	fi
+
+verify-before-publish-cgnat:
+	@if [ "$(NOK_VERIFY_BEFORE_PUBLISH)" = "yes" ]; then \
+		$(MAKE) verify-recipe RECIPE=cgnat NOK_RECIPE_VERIFY_LEVEL=install; \
+	else \
+		echo "--> RECIPE [CG-NAT]: Pre-publish verification skipped (set NOK_VERIFY_BEFORE_PUBLISH=yes to enable)"; \
 	fi

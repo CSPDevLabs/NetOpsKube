@@ -1,6 +1,6 @@
 # NetOpsKube - NetOps Kubernetes Project
 
-NetOpsKube is a collaborative open-source project that provides a Kubernetes-based platform for deploying and managing network applications and services. It establishes a foundational platform with integrated observability, GitOps, network automation, and configuration management capabilities. The platform integrates tools such as Grafana, Prometheus, gNMIc, Gitea, Flux, Containerlab, and SDCIO (Kubenet), and provides a common foundation for deploying network solutions such as BNG and DIA.
+NetOpsKube is a collaborative open-source project that provides a Kubernetes-based platform for deploying and managing network applications and services. It establishes a foundational platform with integrated observability, GitOps, network automation, and configuration management capabilities. The platform integrates tools such as Grafana, Prometheus, gNMIc, Gitea, Flux, Containerlab, and SDCIO (Kubenet), and provides a common foundation for deploying network solutions such as BNG, DIA, and CG-NAT.
 
 ---
 
@@ -52,7 +52,7 @@ To successfully run these Makefile targets, the following general requirements m
   docker pull registry.srlinux.dev/pub/nokia_srsim:25.10.R1
   ```
 
-  A valid Nokia SROS license file must be present at the path specified by `SRSIM_LICENSE_FILE` (default: `$(NOK_CLABS_DIR)/nok-bng/srsim-lic-25.txt` or `$(NOK_CLABS_DIR)/nok-dia/srsim-lic-25.txt`).
+  A valid Nokia SROS license file must be present at the path specified by `SRSIM_LICENSE_FILE` (default: `$(NOK_CLABS_DIR)/<recipe>/srsim-lic-25.txt` for `nok-bng`, `nok-dia`, or `nok-cgnat`).
 
 - **IP Segments:**
   - Kind picks its Docker network at runtime (for example, `172.18.0.0/24` or `172.19.0.0/16`).
@@ -60,6 +60,7 @@ To successfully run these Makefile targets, the following general requirements m
   - Pod subnet: `10.244.0.0/16`
   - Service subnet: `10.96.0.0/12`
   - Containerlab BNG network: `172.21.20.0/24`
+  - Containerlab CG-NAT network: `172.21.30.0/24`
 
 Containerlab uses a separate Docker network from the Kubernetes Kind network.
 
@@ -99,9 +100,9 @@ The Makefile orchestrates several key areas:
 
 - **KPT Package Deployment:** Defines macros to simplify deployment and reconciliation of Kubernetes resource packages using `kpt live apply`.
 
-- **GitOps Management:** Deploys the shared Gitea instance and bootstraps Flux during the common platform setup. BNG and DIA then create and synchronize their own solution-specific GitOps repositories and Flux Kustomizations.
+- **GitOps Management:** Deploys the shared Gitea instance and bootstraps Flux during the common platform setup. BNG, DIA, and CG-NAT then create and synchronize their own solution-specific GitOps repositories and Flux Kustomizations.
 
-- **Containerlab Integration:** Provides targets to deploy and destroy network topologies defined in Containerlab, specifically for Nokia BNG and DIA environments.
+- **Containerlab Integration:** Provides targets to deploy and destroy network topologies defined in Containerlab, specifically for Nokia BNG, DIA, and CG-NAT environments.
 
 - **Service Exposure:** Includes mechanisms to port-forward the ingress controller service, making applications accessible from the host machine.
 
@@ -178,6 +179,14 @@ Onboards the DIA solution onto the already deployed NetOpsKube platform.
 
 This target configures the DIA-specific Kubernetes, GitOps, Grafana dashboard, portal, and authentication resources.
 
+### CG-NAT Solution
+
+#### `make try-nok-cgnat`
+
+Onboards the Nokia CG-NAT (DS-Lite AFTR + stateful inter-chassis redundancy) 11-node digital twin onto the already deployed NetOpsKube platform.
+
+This target configures the CG-NAT-specific Kubernetes, GitOps, Grafana dashboard, portal, and authentication resources.
+
 
 
 </details>
@@ -208,13 +217,13 @@ NetOpsKube follows a sequential deployment flow:
 └───────────────┬───────────────┘
                 │
                 ▼
-       ┌────────┴────────┐
-       │                 │
-       ▼                 ▼
-┌──────────────┐  ┌──────────────┐
-│  4. BNG      │  │  4. DIA      │
-│  Solution    │  │  Solution    │
-└──────────────┘  └──────────────┘
+       ┌────────┴────────┬────────┐
+       │                 │        │
+       ▼                 ▼        ▼
+┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+│  4. BNG      │  │  4. DIA      │  │  4. CG-NAT   │
+│  Solution    │  │  Solution    │  │  Solution    │
+└──────────────┘  └──────────────┘  └──────────────┘
 ```
 
 ### 1. Clone Repository
@@ -277,7 +286,7 @@ After Containerlab is deployed, deploy the common NetOpsKube platform:
 make try-nok
 ```
 
-The base platform is solution-independent and provides the shared infrastructure required by both BNG and DIA.
+The base platform is solution-independent and provides the shared infrastructure required by BNG, DIA, and CG-NAT.
 
 This includes:
 
@@ -331,9 +340,26 @@ The DIA onboarding includes:
 - DIA portal menu enablement
 - DIA authentication ingress configuration
 
+#### CG-NAT
+
+```bash
+make try-nok-cgnat
+```
+
+The CG-NAT onboarding includes:
+
+- CG-NAT Kubernetes package
+- CG-NAT-specific Gitea repositories
+- CG-NAT Flux Git secret and GitRepository source
+- CG-NAT manifest synchronization
+- CG-NAT Grafana dashboard synchronization
+- CG-NAT Flux Kustomizations
+- CG-NAT portal menu enablement
+- CG-NAT authentication ingress configuration
+
 ### Complete Deployment Commands
 
-BNG and DIA can be deployed together on the same NetOpsKube environment. The common base platform is deployed once, followed by the required solution-specific deployments.
+BNG, DIA, and CG-NAT can be deployed together on the same NetOpsKube environment. The common base platform is deployed once, followed by the required solution-specific deployments.
 
 **BNG + DIA**
 
@@ -374,6 +400,14 @@ make try-nok
 make try-nok-dia
 ```
 
+**CG-NAT only:**
+
+```bash
+sudo make deploy-clab-cgnat
+make try-nok
+make try-nok-cgnat
+```
+
 </details>
 
 ---
@@ -404,7 +438,7 @@ curl --resolve bng.nok.local:8080:127.0.0.1 http://bng.nok.local:8080
 
 <summary><strong>Access Gitea</strong></summary>
 
-Gitea provides the Git repository and GitOps management interface for NetOpsKube. It is deployed as part of the common NetOpsKube base platform and is shared across the BNG and DIA solutions.
+Gitea provides the Git repository and GitOps management interface for NetOpsKube. It is deployed as part of the common NetOpsKube base platform and is shared across the BNG, DIA, and CG-NAT solutions.
 
 The Gitea web interface can be accessed from the **Gitea** option available in the NetOpsKube Portal.
 

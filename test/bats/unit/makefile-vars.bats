@@ -17,6 +17,7 @@ load '../../helpers/common.bash'
   [ "$(make_var KIND_LB_GITEA_SSH_HOST)" = "102" ]
   [ "$(make_var KIND_LB_BNG_SYSLOG_HOST)" = "101" ]
   [ "$(make_var KIND_LB_DIA_SYSLOG_HOST)" = "103" ]
+  [ "$(make_var KIND_LB_CGNAT_SYSLOG_HOST)" = "104" ]
 }
 
 @test "Gitea and GitOps Makefile defaults are set" {

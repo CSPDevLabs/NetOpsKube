@@ -15,6 +15,9 @@ setup() {
   [ "$(yq_get "$FIXTURE_NOK_KPT/nok-base/apply-setters.yaml" ingress-lb-ip)" = "172.30.0.100" ]
   [ "$(yq_get "$FIXTURE_NOK_KPT/nok-bng/apply-setters.yaml" syslog-lb-ip)" = "172.30.0.101" ]
   [ "$(yq_get "$FIXTURE_NOK_KPT/nok-dia/apply-setters.yaml" syslog-lb-ip)" = "172.30.0.103" ]
+  if [[ -f "$FIXTURE_NOK_KPT/nok-cgnat/apply-setters.yaml" ]]; then
+    [ "$(yq_get "$FIXTURE_NOK_KPT/nok-cgnat/apply-setters.yaml" syslog-lb-ip)" = "172.30.0.104" ]
+  fi
   [ "$(yq_get "$FIXTURE_NOK_KPT/nok-git/apply-setters.yaml" gitea-ssh-lb-ip)" = "172.30.0.102" ]
 }
 

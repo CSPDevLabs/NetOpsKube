@@ -9,15 +9,13 @@
 #      - Installs shared infrastructure (MetalLB, Prometheus Operator,
 #        GNMIc Operator, BBM, Flux, Gitea, authentication, etc.).
 #
-#   2. make try-nok-bng
-#      - Deploys the BNG solution and its GitOps resources.
-#
-#   3. make try-nok-dia
-#      - Deploys the DIA solution and its GitOps resources.
+#   2. make try-nok-bng / try-nok-dia / try-nok-cgnat
+#      - Deploys a recipe (BNG, DIA, or CG-NAT) and its GitOps resources.
+#      Recipes are independent and may be installed in any order after try-nok.
 #
 # IMPORTANT:
-# Both BNG and DIA install independent monitoring stacks (Prometheus,
-# Alertmanager, Grafana, ServiceMonitors, etc.) into their own namespaces.
+# Each recipe installs an independent monitoring stack (Prometheus,
+# Alertmanager, Grafana, ServiceMonitors, etc.) into its own namespace.
 # Although the resources are namespaced, some supporting resources are
 # cluster-scoped (for example ClusterRoles, ClusterRoleBindings and CRDs
 # managed by the Prometheus Operator).
@@ -28,14 +26,9 @@
 #     make try-nok
 #     make try-nok-bng
 #     make try-nok-dia
+#     make try-nok-cgnat
 #
-# or
-#
-#     make try-nok
-#     make try-nok-dia
-#     make try-nok-bng
-#
-# Both sequences should result in functional BNG and DIA deployments.
+# Any subset of recipes may be deployed after try-nok.
 # ==============================================================================
 
 
@@ -49,6 +42,7 @@ endif
 
 include make/bng.mk
 include make/dia.mk
+include make/cgnat.mk
 include make/auth.mk
 include make/recipe-verify.mk
 include make/test.mk
@@ -176,6 +170,10 @@ update-kpt-lb-setters: git-clone-kpt $(YQ) ## Write KinD LB IPs into nok-kpt app
 		-i $(NOK_KPT_DIR)/nok-bng/apply-setters.yaml ;\
 	$(YQ) eval '.data."syslog-lb-ip" = "'$$IP_PREFIX'.$(KIND_LB_DIA_SYSLOG_HOST)"' \
 		-i $(NOK_KPT_DIR)/nok-dia/apply-setters.yaml ;\
+	if [ -f "$(NOK_KPT_DIR)/nok-cgnat/apply-setters.yaml" ]; then \
+		$(YQ) eval '.data."syslog-lb-ip" = "'$$IP_PREFIX'.$(KIND_LB_CGNAT_SYSLOG_HOST)"' \
+			-i $(NOK_KPT_DIR)/nok-cgnat/apply-setters.yaml ;\
+	fi ;\
 	$(YQ) eval '.data."gitea-ssh-lb-ip" = "'$$IP_PREFIX'.$(KIND_LB_GITEA_SSH_HOST)"' \
 		-i $(NOK_KPT_DIR)/nok-git/apply-setters.yaml ;\
 	$(YQ) eval '.data."blackbox-lb-ip" = "'$$IP_PREFIX'.$(KIND_LB_BLACKBOX_HOST)"' \
@@ -189,7 +187,7 @@ show-kind-lb-setters: ## Show KinD LB prefix and apply-setters.yaml values (kpt#
 	fi ;\
 	echo "--> KIND: KinD LB network prefix is $$IP_PREFIX (template: $(KIND_LB_DEFAULT_PREFIX))" ;\
 	echo "--> KPT: apply-setters.yaml values (run 'make update-kpt-lb-setters' to refresh):" ;\
-	for pkg in nok-lb nok-base nok-bng nok-dia nok-git nok-bbm; do \
+	for pkg in nok-lb nok-base nok-bng nok-dia nok-cgnat nok-git nok-bbm; do \
 		f="$(NOK_KPT_DIR)/$$pkg/apply-setters.yaml" ;\
 		if [ -f "$$f" ]; then \
 			echo "    $$pkg:" ;\

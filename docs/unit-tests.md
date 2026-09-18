@@ -1,6 +1,6 @@
 # Unit tests — recipe health and integration testing
 
-Per-recipe automated health/integration tests on deploy. Baseline recipes: **BNG** and **DIA**. Operators run verification after deploy; publish to Gitea is unchanged.
+Per-recipe automated health/integration tests on deploy. Baseline recipes: **BNG**, **DIA**, and **CG-NAT**. Operators run verification after deploy; publish to Gitea is unchanged.
 
 ## Three-repo test model
 
@@ -13,7 +13,7 @@ Per-recipe automated health/integration tests on deploy. Baseline recipes: **BNG
 ## Quick start (no cluster)
 
 ```bash
-# kpt — validate BNG/DIA packages
+# kpt — validate BNG/DIA/CG-NAT packages
 cd kpt && make test
 
 # netopskube — unit tests + kpt validation (sibling kpt checkout or KPT_ROOT)
@@ -30,6 +30,7 @@ cd netopskube
 
 make verify-recipe-bng
 make verify-recipe-dia
+make verify-recipe-cgnat
 make test-recipes
 
 # Full stack (containerlab + gitops + metrics)
@@ -50,9 +51,9 @@ NOK_RECIPE_VERIFY_LEVEL=full make verify-recipe-bng
 
 ## Optional pre-publish check
 
-`verify-before-publish-bng` and `verify-before-publish-dia` run install-level `verify-recipe-*` only when **`NOK_VERIFY_BEFORE_PUBLISH=yes`** (default: **no**).
+`verify-before-publish-bng`, `verify-before-publish-dia`, and `verify-before-publish-cgnat` run install-level `verify-recipe-*` only when **`NOK_VERIFY_BEFORE_PUBLISH=yes`** (default: **no**).
 
-They are **not** attached to `push-bng-manifests` / `push-dia-manifests`. Publish behavior is unchanged from pre–Epic 9 installs.
+They are **not** attached to `push-*-manifests`. Publish behavior is unchanged from pre–Epic 9 installs.
 
 ```bash
 # Optional, explicit gate before you push manifests yourself:
@@ -61,7 +62,7 @@ NOK_VERIFY_BEFORE_PUBLISH=yes make verify-before-publish-bng
 
 ## Flux DIA naming
 
-DIA GitOps kustomizations use prefix `dia-` (e.g. `dia-prometheus`) to avoid collisions with BNG (`prometheus`). Set `FLUX_DIA_KUST_PREFIX` to override.
+DIA GitOps kustomizations use prefix `dia-` (e.g. `dia-prometheus`) to avoid collisions with BNG (`prometheus`). Set `FLUX_DIA_KUST_PREFIX` to override. CG-NAT kustomizations use prefix `cgnat-`.
 
 ## CI
 
@@ -71,7 +72,7 @@ DIA GitOps kustomizations use prefix `dia-` (e.g. `dia-prometheus`) to avoid col
 2. kpt `make test` (package validation)
 3. nok-controller `pytest`
 
-**kpt pin:** workflow checks out `feat/portal-embedding` until the portal kpt PR merges; follow-up to pin a SHA or use `main` / `feat/ip-setters`.
+**kpt pin:** workflow checks out `feat/portal-embedding` until the portal kpt PR merges; follow-up to pin a SHA or use `main` / `feat/ip-setters`. CG-NAT package checks in NetOpsKube skip when that checkout does not yet contain `nok-cgnat`.
 
 ## See also
 

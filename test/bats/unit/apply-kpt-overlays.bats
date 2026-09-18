@@ -13,6 +13,8 @@ setup() {
   [ -f "$FIXTURE_NOK_KPT/nok-bng/ingress/ingress.yaml" ]
   grep -q '/gitea' "$FIXTURE_NOK_KPT/nok-bng/ingress/ingress.yaml"
   [ -f "$FIXTURE_NOK_KPT/nok-bng/portal/portal-gitea-proxy-svc.yaml" ]
+  [ -f "$FIXTURE_NOK_KPT/nok-cgnat/ingress/ingress.yaml" ]
+  grep -q '/nok-cgnat/prometheus' "$FIXTURE_NOK_KPT/nok-cgnat/ingress/ingress.yaml"
 }
 
 @test "apply-kpt-overlays skips when overlays directory is missing" {

@@ -6,7 +6,7 @@
 # This file contains shared variables, tool versions, repository locations,
 # proxy configuration, OS detection, download URLs, GitOps settings, and
 # reusable helper macros used by all solution-specific Makefiles (base, BNG,
-# DIA, authentication, etc.).
+# DIA, CG-NAT, authentication, etc.).
 #
 # Most users only need to modify configuration variables (cluster name, proxy,
 # repository locations, or tool versions). The remaining macros and helper
@@ -74,6 +74,7 @@ KIND_LB_INGRESS_HOST ?= 100
 KIND_LB_BNG_SYSLOG_HOST ?= 101
 KIND_LB_GITEA_SSH_HOST ?= 102
 KIND_LB_DIA_SYSLOG_HOST ?= 103
+KIND_LB_CGNAT_SYSLOG_HOST ?= 104
 KIND_LB_BLACKBOX_HOST ?= 111
 KIND_LB_POOL_START ?= 100
 KIND_LB_POOL_END ?= 120
@@ -102,7 +103,7 @@ FLUX ?= $(TOOLS)/flux
 
 
 # --- Git Repository Configuration ---
-# Define the SROS image and license file for the BNG deployment
+# Define the SROS image and license file for recipe Containerlab deployments
 SRLINUX_IMAGE ?= registry.srlinux.dev/pub/nokia_srsim:25.10.R1
 SRSIM_LICENSE_FILE ?= $(NOK_CLABS_DIR)/$(NOK_CLAB)/srsim-lic-25.txt
 

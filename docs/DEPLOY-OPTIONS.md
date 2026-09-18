@@ -43,14 +43,15 @@ make PROM_RETENTION=7d PROM_RETENTION_SIZE=8GB PROM_STORAGE_SIZE=20Gi \
 | `GNMIC_MEMORY_LIMIT` | _(unset)_ | gNMIc Cluster CRs |
 
 BBM retention is patched on `nok-bbm/prometheus/prometheus-cr.yaml` via `make update-kpt-tuning-setters` (runs before `install-bbm-pkg`).
-Recipe values are applied at manifest push time (`push-bng-manifests` / `push-dia-manifests`).
+Recipe values are applied at manifest push time (`push-bng-manifests` / `push-dia-manifests` / `push-cgnat-manifests`).
 
 ## Grafana dashboards (proxy-restricted environments)
 
-BNG and DIA dashboards are delivered from in-cluster Gitea repo `grafana-dashboards`:
+BNG, DIA, and CG-NAT dashboards are delivered from in-cluster Gitea repo `grafana-dashboards`:
 
 - BNG JSON: `bng/` prefix (`bng/bng-core-aggregation.json`, …)
 - DIA JSON: `dia/` prefix (`dia/routing-and-fdb.json`, …)
+- CG-NAT JSON: `cgnat/` prefix (`cgnat/cgnat-isa-and-icr.json`, …)
 
 ```bash
 # Default: in-cluster Gitea URLs in GrafanaDashboard CRs
@@ -66,6 +67,6 @@ make GRAFANA_DASHBOARD_SOURCE=upstream gitops-bng-kustomization
 | `GRAFANA_DASHBOARD_GITEA_BASE` | `http://gitea-http.nok-git.svc.cluster.local:3000/<GITEA_ADMIN_USER>/grafana-dashboards/raw/branch/main` | Base URL for dashboard JSON |
 | `FLUX_GRAFANA_REPO` | `grafana-dashboards` | Gitea repo name |
 
-Push dashboards per recipe: `make push-bng-grafana-dashboards` or `make push-dia-grafana-dashboards` (included in the matching `gitops-*-kustomization` target).
+Push dashboards per recipe: `make push-bng-grafana-dashboards`, `make push-dia-grafana-dashboards`, or `make push-cgnat-grafana-dashboards` (included in the matching `gitops-*-kustomization` target).
 
 Interim without Gitea: set `GRAFANA_DASHBOARD_SOURCE=upstream` or embed JSON in manifests manually (GrafanaDashboard `spec.json`).

@@ -132,6 +132,28 @@ annotate-auth-ingress-dia: ## Configure OAuth authentication for the DIA ingress
 		echo "--> AUTH: Keycloak disabled. Skipping DIA ingress annotation."; \
 	fi
 
+.PHONY: annotate-auth-ingress-cgnat
+annotate-auth-ingress-cgnat: ## Configure OAuth authentication for the CG-NAT ingress
+	@if [ "$(KEYCLOAK_ENABLED)" = "YES" ]; then \
+		if $(KUBECTL) get ingress nok-apps-ingress -n nok-cgnat >/dev/null 2>&1; then \
+			echo "--> AUTH: Updating nok-cgnat/nok-apps-ingress for OAuth probing"; \
+			$(KUBECTL) annotate ingress nok-apps-ingress \
+				-n nok-cgnat \
+				netopskube.io/bbm-oauth="true" \
+				nginx.ingress.kubernetes.io/auth-url="http://oauth2-proxy.nok-base.svc.cluster.local/oauth2/auth" \
+				nginx.ingress.kubernetes.io/auth-signin="http://bng.nok.local:8080/oauth2/start?rd=\$$escaped_request_uri" \
+				--overwrite; \
+			$(KUBECTL) annotate ingress nok-apps-ingress \
+				-n nok-cgnat \
+				netopskube.io/bbm- \
+				--overwrite; \
+		else \
+			echo "--> AUTH: Ingress nok-cgnat/nok-apps-ingress not found. Skipping."; \
+		fi; \
+	else \
+		echo "--> AUTH: Keycloak disabled. Skipping CG-NAT ingress annotation."; \
+	fi
+
 .PHONY: annotate-auth-ingress-bbm
 annotate-auth-ingress-bbm: ## Configure OAuth authentication for the BBM ingress
 	@if [ "$(KEYCLOAK_ENABLED)" = "YES" ]; then \

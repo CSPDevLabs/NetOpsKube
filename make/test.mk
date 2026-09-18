@@ -9,7 +9,7 @@
 BATS ?= bats
 TEST_DIR ?= $(BASE)/test
 
-.PHONY: test test-unit test-integration test-smoke test-coverage test-recipe-bng test-recipe-dia test-recipes test-kpt test-epic9
+.PHONY: test test-unit test-integration test-smoke test-coverage test-recipe-bng test-recipe-dia test-recipe-cgnat test-recipes test-kpt test-epic9
 test: test-unit test-coverage ## Run default test suite and verify 100% unit scope coverage
 
 test-unit: $(YQ) ## Run BATS unit tests (no cluster required)
@@ -54,7 +54,13 @@ test-recipe-dia: check-tools ## Run DIA recipe integration checks (cluster requi
 	@echo ""
 	@echo "--> TEST: DIA recipe checks completed successfully."
 
-test-recipes: test-recipe-bng test-recipe-dia ## Run install-level checks for BNG and DIA recipes
+test-recipe-cgnat: check-tools ## Run CG-NAT recipe integration checks (cluster required; NOK_RECIPE_VERIFY_LEVEL=install|full)
+	@echo "--> TEST: Running CG-NAT recipe verification (level=$(NOK_RECIPE_VERIFY_LEVEL))"
+	@$(MAKE) verify-recipe-cgnat NOK_RECIPE_VERIFY_LEVEL=$(NOK_RECIPE_VERIFY_LEVEL)
+	@echo ""
+	@echo "--> TEST: CG-NAT recipe checks completed successfully."
+
+test-recipes: test-recipe-bng test-recipe-dia test-recipe-cgnat ## Run install-level checks for BNG, DIA, and CG-NAT recipes
 
 KPT_VALIDATE_DIR ?= $(dir $(NOK_KPT_DIR))
 test-kpt: ## Run kpt recipe package validation (Epic 9; sibling kpt repo or NOK_KPT_DIR)

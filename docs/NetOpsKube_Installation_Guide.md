@@ -144,6 +144,7 @@ Ensure proxy settings are properly configured in the respective package manager 
 | KinD pods | `10.244.0.0/16` | Fixed in `build/kind-cluster.yaml` |
 | KinD services | `10.96.0.0/12` | Fixed in `build/kind-cluster.yaml` |
 | Containerlab (BNG) | `172.21.20.0/24` | Separate Docker network |
+| Containerlab (CG-NAT) | `172.21.30.0/24` | Separate Docker network (does not overlap BNG) |
 
 After `make cluster-up`, check the detected LB prefix:
 ```bash

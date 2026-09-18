@@ -42,7 +42,7 @@ jobs:
           sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64
           sudo chmod +x /usr/local/bin/yq
 
-      - name: Validate BNG and DIA kpt packages
+      - name: Validate BNG, DIA, and CG-NAT kpt packages
         working-directory: kpt
         run: |
           if [ -f Makefile ] && grep -q '^test:' Makefile; then
