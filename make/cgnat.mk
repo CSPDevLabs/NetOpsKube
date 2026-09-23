@@ -21,13 +21,13 @@ CGNAT_MANIFESTS_DIR := $(NOK_CLABS_DIR)/nok-cgnat/nok-manifests
 CGNAT_REPO_URL = ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_CGNAT_REPO).git
 
 .PHONY: try-nok-cgnat
-try-nok-cgnat: install-cgnat-pkg gitops-cgnat-kustomization portal-enable-cgnat annotate-auth-ingress-cgnat annotate-auth-ingress-gitea ## Deploy the CG-NAT solution
+try-nok-cgnat: install-cgnat-pkg gitops-cgnat-kustomization portal-enable-cgnat annotate-auth-ingress-cgnat annotate-auth-ingress-gitea cgnat-post-deploy ## Deploy the CG-NAT solution
 
 .PHONY: gitops-cgnat-kustomization
 gitops-cgnat-kustomization: gitea-create-cgnat-repo gitea-create-grafana-dashboards-repo flux-create-cgnat-secret push-cgnat-manifests push-cgnat-grafana-dashboards flux-create-cgnat-source create-cgnat-kustomizations ## Synchronize CG-NAT manifests with Flux
 	@echo "--> GITOPS: CG-NAT repo in sync by Flux"
 
-.PHONY: deploy-clab-cgnat
+.PHONY: deploy-clab-cgnat redeploy-clab-cgnat
 deploy-clab-cgnat: NOK_CLAB=nok-cgnat
 deploy-clab-cgnat: check-tools git-clone-clab check-clab-prerequisites ## Deploys the Containerlab CG-NAT topology
 	@echo "--> CLAB: Deploying CG-NAT topology from $(NOK_CLABS_DIR)/nok-cgnat"
@@ -37,6 +37,22 @@ deploy-clab-cgnat: check-tools git-clone-clab check-clab-prerequisites ## Deploy
 		echo "Error: $(NOK_CLABS_DIR)/nok-cgnat directory not found. Please ensure the nok-clabs repository is cloned and contains the nok-cgnat subdirectory." ;\
 		exit 1 ;\
 	fi
+	@$(BASE)/scripts/cgnat-post-deploy.sh
+
+redeploy-clab-cgnat: NOK_CLAB=nok-cgnat
+redeploy-clab-cgnat: check-tools git-clone-clab check-clab-prerequisites ## Reconfigures an existing CG-NAT lab (e.g. add esa-stub)
+	@echo "--> CLAB: Reconfiguring CG-NAT topology from $(NOK_CLABS_DIR)/nok-cgnat (--reconfigure; BNG lab untouched)"
+	@if [ -d "$(NOK_CLABS_DIR)/nok-cgnat" ]; then \
+		cd $(NOK_CLABS_DIR)/nok-cgnat && $(CLAB) deploy --reconfigure -t topo.yaml ;\
+	else \
+		echo "Error: $(NOK_CLABS_DIR)/nok-cgnat directory not found. Please ensure the nok-clabs repository is cloned and contains the nok-cgnat subdirectory." ;\
+		exit 1 ;\
+	fi
+	@$(BASE)/scripts/cgnat-post-deploy.sh
+
+.PHONY: cgnat-post-deploy
+cgnat-post-deploy: ## Attach KinD to CG-NAT mgmt, wait for gRPC, restart gNMIc
+	@$(BASE)/scripts/cgnat-post-deploy.sh
 
 .PHONY: destroy-clab-cgnat
 destroy-clab-cgnat: check-tools git-clone-clab ## Destroys the Containerlab CG-NAT topology and cleans up
@@ -150,6 +166,6 @@ create-cgnat-kustomizations: ## Create Flux Kustomizations for CG-NAT manifests
 portal-enable-cgnat: ## Enable the CG-NAT solution in the NetOpsKube Portal
 	@echo "--> PORTAL: Enabling CG-NAT menu"
 	@$(KUBECTL) get configmap nok-apps-menu-config -n nok-base -o json | \
-	jq '.data["menu-config.json"] |= (fromjson | .featured |= map(. + {"openInNewTab": false}) | .solutions |= map(if .id == "nok-cgnat" then .deployed = "yes" | .services |= map(. + {"openInNewTab": false}) else . end) | tojson)' | \
+	jq '.data["menu-config.json"] |= (fromjson | .featured |= map(. + {"openInNewTab": false}) | .solutions |= (if any(.id == "nok-cgnat") then map(if .id == "nok-cgnat" then .deployed = "yes" | .services |= map(. + {"openInNewTab": false}) else . end) else . + [{"id":"nok-cgnat","displayName":"NOK CG-NAT","deployed":"yes","services":[{"name":"Prometheus","icon":"prometheus","description":"Metrics collection and querying","path":"/nok-cgnat/prometheus/graph","openInNewTab":false},{"name":"Grafana","icon":"grafana","description":"Dashboards and visualization","path":"/nok-cgnat/grafana/dashboards","openInNewTab":false},{"name":"Alertmanager","icon":"alertmanager","description":"Alert routing and notifications","path":"/nok-cgnat/alertmanager","openInNewTab":false}]}] end) | tojson)' | \
 	$(KUBECTL) apply -f -
 	@$(KUBECTL) rollout restart deployment/nok-apps-portal-app -n nok-base
