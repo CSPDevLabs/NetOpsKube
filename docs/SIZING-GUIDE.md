@@ -38,7 +38,7 @@ Customer-facing reference for planning CPU, memory, and disk for NetOpsKube depl
 
 | Component | CPU | Memory | Storage | Retention |
 |-----------|-----|--------|---------|-----------|
-| BBM Prometheus | — | 400Mi req | **10Gi PVC** | **24h** (operator default; not set in CR) |
+| BBM Prometheus | — | 400Mi req | **10Gi PVC** | **24h** (`prometheus-retention` setter) |
 | BBM Grafana | 250m req | — | 1Gi PVC | — |
 | blackbox-exporter | — | — | — | — |
 | kube-state-metrics | — | — | — | — |
