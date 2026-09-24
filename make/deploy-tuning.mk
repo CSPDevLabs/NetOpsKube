@@ -32,6 +32,7 @@ GRAFANA_DASHBOARDS_STAGING ?= $(BASE)/build/grafana-dashboards-staging
 
 STAGE_RECIPE_SCRIPT := $(BASE)/scripts/stage-recipe-manifests.sh
 PUSH_GRAFANA_SCRIPT := $(BASE)/scripts/push-grafana-dashboards.sh
+CONFIGURE_SDCIO_SCRIPT := $(BASE)/scripts/configure-sdcio-kpt.sh
 
 define REQUIRE_KPT_CHECKOUT
 @if [ ! -f "$(NOK_KPT_DIR)/nok-base/Kptfile" ]; then \
@@ -41,35 +42,27 @@ fi
 endef
 
 .PHONY: configure-sdcio-kpt
-configure-sdcio-kpt: ## Toggle SDCIO resources in kpt packages via .krmignore
-	$(REQUIRE_KPT_CHECKOUT)
+configure-sdcio-kpt: git-clone-kpt ## Toggle SDCIO resources in kpt packages (package-root .krmignore)
 ifeq ($(SDCIO_ENABLED_BOOL),1)
-	@echo "--> SDCIO: enabled (platform + recipe exporters)"
-	@rm -f $(NOK_KPT_DIR)/nok-base/sdcio/.krmignore \
-		$(NOK_KPT_DIR)/nok-bng/ndt-sdcio-visual/.krmignore \
-		$(NOK_KPT_DIR)/nok-dia/ndt-sdcio-visual/.krmignore
+	@bash "$(CONFIGURE_SDCIO_SCRIPT)" "$(NOK_KPT_DIR)" enabled
 else
-	@echo "--> SDCIO: disabled — excluding SDCIO from kpt apply"
-	@for dir in nok-base/sdcio nok-bng/ndt-sdcio-visual nok-dia/ndt-sdcio-visual; do \
-		if [ -d "$(NOK_KPT_DIR)/$$dir" ]; then \
-			echo "*" > "$(NOK_KPT_DIR)/$$dir/.krmignore" ; \
-		fi ; \
-	done
+	@bash "$(CONFIGURE_SDCIO_SCRIPT)" "$(NOK_KPT_DIR)" disabled
 endif
 
 .PHONY: update-kpt-tuning-setters
-update-kpt-tuning-setters: $(YQ) ## Write BBM Prometheus tuning into nok-bbm apply-setters.yaml
+update-kpt-tuning-setters: $(YQ) ## Patch BBM Prometheus CR retention (recipe tuning uses manifest staging)
 	$(REQUIRE_KPT_CHECKOUT)
-	@SETTERS="$(NOK_KPT_DIR)/nok-bbm/apply-setters.yaml" ; \
-	if [ ! -f "$$SETTERS" ]; then \
-		echo "Error: $$SETTERS not found" ; exit 1 ; \
+	@PROM_CR="$(NOK_KPT_DIR)/nok-bbm/prometheus/prometheus-cr.yaml" ; \
+	if [ ! -f "$$PROM_CR" ]; then \
+		echo "Error: $$PROM_CR not found" ; exit 1 ; \
 	fi ; \
-	echo "--> KPT: Prometheus retention $(PROM_RETENTION) → nok-bbm/apply-setters.yaml" ; \
-	$(YQ) eval '.data."prometheus-retention" = "$(PROM_RETENTION)"' -i "$$SETTERS" ; \
-	BBM_RETENTION_SIZE="$(PROM_RETENTION_SIZE)" ; \
-	if [ -z "$$BBM_RETENTION_SIZE" ]; then BBM_RETENTION_SIZE=0 ; fi ; \
-	echo "--> KPT: Prometheus retentionSize $$BBM_RETENTION_SIZE → nok-bbm/apply-setters.yaml" ; \
-	$(YQ) eval ".data.\"prometheus-retention-size\" = \"$$BBM_RETENTION_SIZE\"" -i "$$SETTERS"
+	echo "--> KPT: Prometheus retention $(PROM_RETENTION) → nok-bbm/prometheus/prometheus-cr.yaml" ; \
+	$(YQ) eval '.spec.retention = "$(PROM_RETENTION)"' -i "$$PROM_CR" ; \
+	if [ -n "$(PROM_RETENTION_SIZE)" ]; then \
+		$(YQ) eval '.spec.retentionSize = "$(PROM_RETENTION_SIZE)"' -i "$$PROM_CR" ; \
+	else \
+		$(YQ) eval 'del(.spec.retentionSize)' -i "$$PROM_CR" ; \
+	fi
 
 define SDCIO_SKIP_DIR
 $(if $(filter 1,$(SDCIO_ENABLED_BOOL)),,$(filter $(1),$(SDCIO_FLUX_SKIP_DIRS)))

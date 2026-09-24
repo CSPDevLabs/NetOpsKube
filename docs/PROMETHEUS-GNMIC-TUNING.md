@@ -8,7 +8,7 @@ Operator guidance for adjusting retention, storage, and collector scale. Knobs a
 
 | Instance | Location | `retention` | `retentionSize` | PVC |
 |----------|----------|-------------|-----------------|-----|
-| BBM | `kpt/nok-bbm/prometheus/prometheus-cr.yaml` | **24h** (`prometheus-retention` setter) | **0** (`prometheus-retention-size` setter, no byte cap) | **10Gi** |
+| BBM | `kpt/nok-bbm/prometheus/prometheus-cr.yaml` | **24h** (patched by `make update-kpt-tuning-setters`) | unset unless `PROM_RETENTION_SIZE` set | **10Gi** |
 | BNG recipe | `nok-clabs/.../prometheus/prometheus.yaml` | unset → **24h** | unset | **none** |
 | DIA recipe | `nok-clabs/.../prometheus/prometheus.yaml` | unset → **24h** | unset | **none** |
 
@@ -89,14 +89,14 @@ spec:
 
 | Variable | Applies to | Example |
 |----------|------------|---------|
-| `PROM_RETENTION` | BBM setter `prometheus-retention` + recipe Prometheus | `7d` |
-| `PROM_RETENTION_SIZE` | BBM setter `prometheus-retention-size` + recipe Prometheus | `8GB` |
+| `PROM_RETENTION` | BBM Prometheus CR + recipe Prometheus | `7d` |
+| `PROM_RETENTION_SIZE` | BBM Prometheus CR + recipe Prometheus | `8GB` |
 | `PROM_STORAGE_SIZE` | Recipe PVC (when set) | `20Gi` |
 | `GNMIC_REPLICAS` | all clusters in recipe | `2` |
 | `GNMIC_CPU_REQUEST` | Cluster CR | `500m` |
 | `GNMIC_MEMORY_LIMIT` | Cluster CR | `2Gi` |
 
-BBM: `make update-kpt-tuning-setters` writes `prometheus-retention` and `prometheus-retention-size` into `nok-bbm/apply-setters.yaml` before `install-bbm-pkg`. `kpt fn render` applies `# kpt-set: ${prometheus-retention}` and `# kpt-set: ${prometheus-retention-size}` on the Prometheus CR. An empty `PROM_RETENTION_SIZE` sets the BBM setter to `0` (no byte cap).
+BBM: `make update-kpt-tuning-setters` patches `nok-bbm/prometheus/prometheus-cr.yaml` before `install-bbm-pkg`. An empty `PROM_RETENTION_SIZE` removes `spec.retentionSize` from the CR.
 
 Recipe: applied automatically when running `push-bng-manifests` / `push-dia-manifests` (staging copy + `yq` patch).
 

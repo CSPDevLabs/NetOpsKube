@@ -19,7 +19,9 @@ make SDCIO_ENABLED=NO try-nok-bng
 
 Per-device opt-out remains available: `spec.sdcio.enabled: false` on NetworkDeviceTarget CRs.
 
-**Note:** Switching from enabled to disabled on an existing cluster **can prune** SDCIO resources. `configure-sdcio-kpt` writes `*` into `.krmignore` under each SDCIO kpt subpackage; the next `kpt live apply` (with `--inventory-policy=adopt`) removes resources that drop out of the package — including config-server PVCs. To keep data, leave SDCIO enabled, back up PVCs, or redeploy on a fresh cluster.
+**Note:** `configure-sdcio-kpt` adds package-root `.krmignore` patterns (`sdcio/**`, `ndt-sdcio-visual/**`) so kpt stops applying those paths. kpt only reads `.krmignore` at a package root (directory with a `Kptfile`) or nested subpackages — not under arbitrary subfolders.
+
+Switching from enabled to disabled on an existing cluster **will prune** SDCIO resources on the next `kpt live apply` (`--inventory-policy=adopt`), including config-server PVCs (4×10Gi per [SIZING-GUIDE.md](SIZING-GUIDE.md)). To keep data, leave SDCIO enabled, back up PVCs, or redeploy on a fresh cluster.
 
 ## Prometheus / gNMIc tuning
 
@@ -33,8 +35,8 @@ make PROM_RETENTION=7d PROM_RETENTION_SIZE=8GB PROM_STORAGE_SIZE=20Gi \
 
 | Variable | Default | Applies to |
 |----------|---------|------------|
-| `PROM_RETENTION` | `24h` | BBM setter `prometheus-retention` + recipe Prometheus |
-| `PROM_RETENTION_SIZE` | _(empty)_ | BBM setter `prometheus-retention-size` + recipe Prometheus |
+| `PROM_RETENTION` | `24h` | BBM Prometheus CR + recipe Prometheus |
+| `PROM_RETENTION_SIZE` | _(empty)_ | BBM Prometheus CR + recipe Prometheus |
 | `PROM_STORAGE_SIZE` | _(unset)_ | Recipe Prometheus PVC (adds PVC when set) |
 | `GNMIC_REPLICAS` | `1` | All gNMIc Cluster CRs in recipe manifests |
 | `GNMIC_CPU_REQUEST` | _(unset)_ | gNMIc Cluster CRs |
@@ -42,7 +44,8 @@ make PROM_RETENTION=7d PROM_RETENTION_SIZE=8GB PROM_STORAGE_SIZE=20Gi \
 | `GNMIC_CPU_LIMIT` | _(unset)_ | gNMIc Cluster CRs |
 | `GNMIC_MEMORY_LIMIT` | _(unset)_ | gNMIc Cluster CRs |
 
-BBM retention is the `prometheus-retention` setter in `nok-bbm/apply-setters.yaml` (`# kpt-set: ${prometheus-retention}` on the Prometheus CR). BBM `retentionSize` is the `prometheus-retention-size` setter (`# kpt-set: ${prometheus-retention-size}`). An empty `PROM_RETENTION_SIZE` writes `0`, which the CRD allows and means no byte cap. `make update-kpt-tuning-setters` writes both setters before `install-bbm-pkg`, and `kpt fn render` applies them.
+BBM: `make update-kpt-tuning-setters` patches `nok-bbm/prometheus/prometheus-cr.yaml` before `install-bbm-pkg` (direct `yq` until kpt package exposes retention setters).
+
 Recipe values are applied at manifest push time (`push-bng-manifests` / `push-dia-manifests`).
 
 ## Grafana dashboards (proxy-restricted environments)
