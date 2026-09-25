@@ -90,8 +90,7 @@ flux-create-bng-source: ## Create the Flux GitRepository source for BNG (after m
 		  --branch=$(FLUX_GIT_BRANCH) \
 		  --secret-ref=$(FLUX_BNG_SECRET) \
 		  --interval=1m \
-		  --namespace=flux-system \
-		  --wait=false; \
+		  --namespace=flux-system; \
 	else \
 		echo "GitRepository source $(FLUX_BNG_REPO) already exists."; \
 	fi

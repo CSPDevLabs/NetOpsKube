@@ -50,19 +50,18 @@ else
 endif
 
 .PHONY: update-kpt-tuning-setters
-update-kpt-tuning-setters: $(YQ) ## Patch BBM Prometheus CR retention (recipe tuning uses manifest staging)
+update-kpt-tuning-setters: $(YQ) ## Write BBM Prometheus tuning into nok-bbm apply-setters.yaml
 	$(REQUIRE_KPT_CHECKOUT)
-	@PROM_CR="$(NOK_KPT_DIR)/nok-bbm/prometheus/prometheus-cr.yaml" ; \
-	if [ ! -f "$$PROM_CR" ]; then \
-		echo "Error: $$PROM_CR not found" ; exit 1 ; \
+	@SETTERS="$(NOK_KPT_DIR)/nok-bbm/apply-setters.yaml" ; \
+	if [ ! -f "$$SETTERS" ]; then \
+		echo "Error: $$SETTERS not found" ; exit 1 ; \
 	fi ; \
-	echo "--> KPT: Prometheus retention $(PROM_RETENTION) → nok-bbm/prometheus/prometheus-cr.yaml" ; \
-	$(YQ) eval '.spec.retention = "$(PROM_RETENTION)"' -i "$$PROM_CR" ; \
-	if [ -n "$(PROM_RETENTION_SIZE)" ]; then \
-		$(YQ) eval '.spec.retentionSize = "$(PROM_RETENTION_SIZE)"' -i "$$PROM_CR" ; \
-	else \
-		$(YQ) eval 'del(.spec.retentionSize)' -i "$$PROM_CR" ; \
-	fi
+	echo "--> KPT: Prometheus retention $(PROM_RETENTION) → nok-bbm/apply-setters.yaml" ; \
+	$(YQ) eval '.data."prometheus-retention" = "$(PROM_RETENTION)"' -i "$$SETTERS" ; \
+	BBM_RETENTION_SIZE="$(PROM_RETENTION_SIZE)" ; \
+	if [ -z "$$BBM_RETENTION_SIZE" ]; then BBM_RETENTION_SIZE=0 ; fi ; \
+	echo "--> KPT: Prometheus retentionSize $$BBM_RETENTION_SIZE → nok-bbm/apply-setters.yaml" ; \
+	$(YQ) eval ".data.\"prometheus-retention-size\" = \"$$BBM_RETENTION_SIZE\"" -i "$$SETTERS"
 
 define SDCIO_SKIP_DIR
 $(if $(filter 1,$(SDCIO_ENABLED_BOOL)),,$(filter $(1),$(SDCIO_FLUX_SKIP_DIRS)))

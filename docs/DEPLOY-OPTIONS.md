@@ -35,8 +35,8 @@ make PROM_RETENTION=7d PROM_RETENTION_SIZE=8GB PROM_STORAGE_SIZE=20Gi \
 
 | Variable | Default | Applies to |
 |----------|---------|------------|
-| `PROM_RETENTION` | `24h` | BBM Prometheus CR + recipe Prometheus |
-| `PROM_RETENTION_SIZE` | _(empty)_ | BBM Prometheus CR + recipe Prometheus |
+| `PROM_RETENTION` | `24h` | BBM setter `prometheus-retention` + recipe Prometheus |
+| `PROM_RETENTION_SIZE` | _(empty)_ | BBM setter `prometheus-retention-size` + recipe Prometheus |
 | `PROM_STORAGE_SIZE` | _(unset)_ | Recipe Prometheus PVC (adds PVC when set) |
 | `GNMIC_REPLICAS` | `1` | All gNMIc Cluster CRs in recipe manifests |
 | `GNMIC_CPU_REQUEST` | _(unset)_ | gNMIc Cluster CRs |
@@ -44,7 +44,7 @@ make PROM_RETENTION=7d PROM_RETENTION_SIZE=8GB PROM_STORAGE_SIZE=20Gi \
 | `GNMIC_CPU_LIMIT` | _(unset)_ | gNMIc Cluster CRs |
 | `GNMIC_MEMORY_LIMIT` | _(unset)_ | gNMIc Cluster CRs |
 
-BBM: `make update-kpt-tuning-setters` patches `nok-bbm/prometheus/prometheus-cr.yaml` before `install-bbm-pkg` (direct `yq` until kpt package exposes retention setters).
+BBM retention is the `prometheus-retention` setter in `nok-bbm/apply-setters.yaml` (`# kpt-set: ${prometheus-retention}` on the Prometheus CR). BBM `retentionSize` is the `prometheus-retention-size` setter (`# kpt-set: ${prometheus-retention-size}`). An empty `PROM_RETENTION_SIZE` writes `0`, which the CRD allows and means no byte cap. `make update-kpt-tuning-setters` writes both setters before `install-bbm-pkg`, and `kpt fn render` applies them.
 
 Recipe values are applied at manifest push time (`push-bng-manifests` / `push-dia-manifests`).
 

@@ -91,8 +91,7 @@ flux-create-dia-source: ## Create the Flux GitRepository source for DIA (after m
 		  --branch=$(FLUX_GIT_BRANCH) \
 		  --secret-ref=$(FLUX_DIA_SECRET) \
 		  --interval=1m \
-		  --namespace=flux-system \
-		  --wait=false; \
+		  --namespace=flux-system; \
 	else \
 		echo "GitRepository source $(FLUX_DIA_REPO) already exists."; \
 	fi
