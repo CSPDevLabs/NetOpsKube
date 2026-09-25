@@ -337,7 +337,7 @@ install-base-final: update-kpt-lb-setters
 	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-base,nok-base,"--reconcile-timeout=5m", "--inventory-policy=adopt")	
 
 .PHONY: install-git-pkg
-install-git-pkg: install-lb-pkg patch-gitea-kpt-manifest preload-gitea-image ## Installs the base kpt package from ./nok-kpt/nok-git
+install-git-pkg: install-lb-pkg git-clone-kpt patch-gitea-kpt-manifest preload-gitea-image ## Installs the base kpt package from ./nok-kpt/nok-git
 	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-git,nok-git,"--reconcile-timeout=5m", "--inventory-policy=adopt")
 
 .PHONY: install-lb-pkg
@@ -422,12 +422,30 @@ wait-for-gitea-ready: ## Wait for Gitea deployment rollout (ignores stale failed
 .PHONY: preload-gitea-image
 preload-gitea-image: ## Pre-pull Gitea image on host and load into KinD (fixes ImagePullBackOff)
 	@echo "--> GITEA: Ensuring $(GITEA_IMAGE) is available on host"
-	@if ! docker image inspect "$(GITEA_IMAGE)" >/dev/null 2>&1; then \
-		docker pull "$(GITEA_IMAGE)" ; \
+	@if ! docker info >/dev/null 2>&1; then \
+		echo "Error: docker is not usable — on eugene-dev run: export PATH=\$$PWD/tools:\$$PATH" >&2 ; \
+		exit 1 ; \
 	fi
-	@echo "--> GITEA: Loading image into KinD cluster $(KIND_CLUSTER_NAME)"
-	@$(KIND) load docker-image "$(GITEA_IMAGE)" --name $(KIND_CLUSTER_NAME)
-	@echo "--> GITEA: Image loaded"
+	@if ! docker inspect "$(KIND_CLUSTER_NAME)-control-plane" >/dev/null 2>&1; then \
+		echo "Error: KinD node $(KIND_CLUSTER_NAME)-control-plane not found — run 'make cluster-up' first" >&2 ; \
+		exit 1 ; \
+	fi
+	@set -e; \
+	node="$(KIND_CLUSTER_NAME)-control-plane"; \
+	platform="$(GITEA_IMAGE_PLATFORM)"; \
+	if ! docker image inspect "$(GITEA_IMAGE)" >/dev/null 2>&1; then \
+		echo "--> GITEA: Pulling $(GITEA_IMAGE) (platform=$$platform; override GITEA_IMAGE=...)"; \
+		docker pull --platform "$$platform" "$(GITEA_IMAGE)"; \
+	fi; \
+	if docker exec "$$node" ctr -n k8s.io images ls -q | grep -qx "$(GITEA_IMAGE)"; then \
+		echo "--> GITEA: $(GITEA_IMAGE) already present on $$node"; \
+	else \
+		echo "--> GITEA: Importing $(GITEA_IMAGE) into KinD cluster $(KIND_CLUSTER_NAME) (platform=$$platform)"; \
+		echo "    (skip kind load docker-image: it imports --all-platforms; Gitea index lists amd64/arm64/riscv64)"; \
+		docker image save --platform "$$platform" "$(GITEA_IMAGE)" | docker exec -i "$$node" \
+			ctr --namespace=k8s.io images import --snapshotter=overlayfs -; \
+	fi; \
+	echo "--> GITEA: Image loaded"
 
 .PHONY: gitea-create-admin
 gitea-create-admin: wait-for-gitea-ready ## Create the Gitea administrator user

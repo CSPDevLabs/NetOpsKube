@@ -72,3 +72,21 @@ make GRAFANA_DASHBOARD_SOURCE=upstream gitops-bng-kustomization
 Push dashboards per recipe: `make push-bng-grafana-dashboards` or `make push-dia-grafana-dashboards` (included in the matching `gitops-*-kustomization` target).
 
 Interim without Gitea: set `GRAFANA_DASHBOARD_SOURCE=upstream` or embed JSON in manifests manually (GrafanaDashboard `spec.json`).
+
+## Gitea image (KinD, corporate networks)
+
+`install-git-pkg` runs `patch-gitea-kpt-manifest` and `preload-gitea-image` so the cluster uses a pullable image (default Docker Hub, not `docker.gitea.com`).
+
+```bash
+make preload-gitea-image    # optional if install-git-pkg will run anyway
+make install-git-pkg
+```
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GITEA_IMAGE` | `docker.io/gitea/gitea:1.25.4-rootless` | Image written into kpt `nok-git` and loaded into KinD |
+| `GITEA_IMAGE_PLATFORM` | `linux/$(ARCH)` from host `uname -m` (`linux/amd64` on x86_64, `linux/arm64` on aarch64) | Platform for `docker pull` / `docker save` when loading into KinD |
+
+Preload pulls one platform (e.g. `linux/amd64`), then `docker save` piped to `ctr images import` on the KinD node **without** `--all-platforms`. `kind load docker-image` fails here because the Gitea tag’s index lists amd64, arm64, and riscv64 while the host only has amd64 layers ([kind known issue](https://kind.sigs.k8s.io/docs/user/known-issues/)).
+
+If preload still fails after a manual `docker pull --platform linux/amd64`, ensure KinD exists (`make cluster-up`) and Docker is usable (`docker info`). On hosts with a broken system Docker wrapper, use `export PATH=$PWD/tools:$PATH` as in the main README.

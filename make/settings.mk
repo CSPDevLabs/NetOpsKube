@@ -164,6 +164,9 @@ GITEA_ADMIN_PASS ?= N0kP4ssw0rd
 GITEA_ADMIN_EMAIL ?= nok@example.com
 # docker.gitea.com is often blocked on corporate networks; Docker Hub mirror works better
 GITEA_IMAGE ?= docker.io/gitea/gitea:1.25.4-rootless
+# Host/KinD node OS arch (linux/amd64 or linux/arm64). Single-platform pull/save for ctr import
+# (Gitea index lists amd64/arm64/riscv64; kind load docker-image uses ctr --all-platforms; kind#3795).
+GITEA_IMAGE_PLATFORM ?= linux/$(ARCH)
 
 FLUX_GIT_REPO ?= flux-bootstrap
 FLUX_GIT_BRANCH ?= main
