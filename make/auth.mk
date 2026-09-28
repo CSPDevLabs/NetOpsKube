@@ -60,7 +60,7 @@ deploy-auth: ## Deploy Keycloak, PostgreSQL, and OAuth2 Proxy
 portal-enable-keycloak: ## Enable Keycloak in the NetOpsKube Portal
 	@echo "--> PORTAL: Enabling Keycloak menu"
 	@$(KUBECTL) get configmap nok-apps-menu-config -n nok-base -o json | \
-	jq '.data["menu-config.json"] |= (fromjson | .featured |= map(if .name == "Keycloak" then . + {"deployed":"yes","path":"/auth/admin/master/console/","openInNewTab":false} elif .name == "BBM" then . + {"openInNewTab":false,"path":"/bbm/dashboards"} else . + {"openInNewTab":false} end) | tojson)' | \
+	jq '.data["menu-config.json"] |= (fromjson | .featured |= map(if .name == "Keycloak" then . + {"deployed":"yes","path":"/auth/admin/master/console/","openInNewTab":false} else . end) | tojson)' | \
 	$(KUBECTL) apply -f -
 	@$(KUBECTL) rollout restart deployment/nok-apps-portal-app -n nok-base
 
@@ -187,7 +187,7 @@ annotate-auth-ingress-gitea: ## Configure OAuth authentication for the Gitea ing
 
 ifeq ($(KEYCLOAK_ENABLED),YES)
 
-configure-auth: clone-keycloak-repo deploy-auth portal-enable-keycloak annotate-auth-ingress-base annotate-auth-ingress-bbm ## Configure authentication and Keycloak
+configure-auth: clone-keycloak-repo deploy-auth portal-enable-keycloak annotate-auth-ingress-base annotate-auth-ingress-bbm annotate-auth-ingress-bng annotate-auth-ingress-dia annotate-auth-ingress-gitea ## Configure authentication and Keycloak
 
 else
 
@@ -195,3 +195,33 @@ configure-auth: ## Configure authentication and Keycloak
 	@echo "--> AUTH: Keycloak disabled. Skipping authentication deployment."
 
 endif
+
+.PHONY: disable-auth
+disable-auth: ## Disable Keycloak and OAuth2 Proxy while preserving their state
+	@echo "--> AUTH: Removing OAuth annotations from application ingresses"
+	@for item in nok-base:nok-apps-portal-ingress nok-bbm:bbm-ingress nok-bng:nok-apps-ingress nok-dia:nok-apps-ingress nok-git:nok-gitea-ingress; do \
+		namespace=$${item%%:*}; ingress=$${item##*:}; \
+		if $(KUBECTL) get ingress "$$ingress" -n "$$namespace" >/dev/null 2>&1; then \
+			$(KUBECTL) annotate ingress "$$ingress" -n "$$namespace" \
+				nginx.ingress.kubernetes.io/auth-url- \
+				nginx.ingress.kubernetes.io/auth-signin- \
+				netopskube.io/bbm-oauth- \
+				--overwrite; \
+		fi; \
+	done
+	@echo "--> AUTH: Hiding Keycloak in the portal"
+	@$(KUBECTL) get configmap nok-apps-menu-config -n nok-base -o json | \
+	jq '.data["menu-config.json"] |= (fromjson | .featured |= map(if .name == "Keycloak" then .deployed = "no" else . end) | tojson)' | \
+	$(KUBECTL) apply -f -
+	@$(KUBECTL) rollout restart deployment/nok-apps-portal-app -n nok-base
+	@echo "--> AUTH: Removing authentication ingress routes and scaling workloads to zero"
+	@$(KUBECTL) delete ingress keycloak-ingress oauth2-proxy-ingress -n nok-base --ignore-not-found
+	@if $(KUBECTL) get deployment/keycloak -n nok-base >/dev/null 2>&1; then \
+		$(KUBECTL) scale deployment/keycloak -n nok-base --replicas=0; \
+	fi
+	@if $(KUBECTL) get deployment/oauth2-proxy -n nok-base >/dev/null 2>&1; then \
+		$(KUBECTL) scale deployment/oauth2-proxy -n nok-base --replicas=0; \
+	fi
+	@if $(KUBECTL) get statefulset/keycloak-postgres -n nok-base >/dev/null 2>&1; then \
+		$(KUBECTL) scale statefulset/keycloak-postgres -n nok-base --replicas=0; \
+	fi

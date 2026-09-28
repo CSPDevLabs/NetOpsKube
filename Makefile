@@ -85,23 +85,15 @@ generate-portal-pv: ## Synchronize portal files into the KinD control-plane node
 	@echo "--> PORTAL: Portal files synchronized"
 
 .PHONY: patch-gitea-kpt-manifest
-patch-gitea-kpt-manifest: git-clone-kpt ## Patch Gitea kpt manifest for KinD (URLs, subpath, image registry)
+patch-gitea-kpt-manifest: git-clone-kpt ## Patch the Gitea image in the kpt manifest for KinD
 	@GITEA_MANIFEST="$(NOK_KPT_DIR)/nok-git/gitea/gitea-manifest-standalone.yaml" ; \
 	if [ ! -f "$$GITEA_MANIFEST" ]; then \
 		echo "Error: $$GITEA_MANIFEST not found — run 'make git-clone-kpt' first" >&2 ; exit 1 ; \
 	fi ; \
-	echo "--> GITEA: Patching manifest (image=$(GITEA_IMAGE))" ; \
-	rm -f $(NOK_KPT_DIR)/nok-git/gitea/ingress.yaml ; \
+	echo "--> GITEA: Patching manifest image ($(GITEA_IMAGE))" ; \
 	sed -i \
 		-e 's|docker.gitea.com/gitea:1.25.4-rootless|$(GITEA_IMAGE)|g' \
-		-e 's|DOMAIN=git.example.com|DOMAIN=bng.nok.local|' \
-		-e 's|ROOT_URL=http://git.example.com|ROOT_URL=http://bng.nok.local:8080/gitea/|' \
-		-e 's|SSH_DOMAIN=git.example.com|SSH_DOMAIN=bng.nok.local|' \
-		"$$GITEA_MANIFEST" ; \
-	if ! grep -q 'SERVE_FROM_SUB_PATH=true' "$$GITEA_MANIFEST"; then \
-		sed -i '/ROOT_URL=http:\/\/bng.nok.local:8080\/gitea\//a\    SERVE_FROM_SUB_PATH=true' \
-			"$$GITEA_MANIFEST" ; \
-	fi
+		"$$GITEA_MANIFEST"
 
 .PHONY: cluster-up
 cluster-up: $(KIND_CONFIG_REAL_LOC) ## Bring up the KinD cluster

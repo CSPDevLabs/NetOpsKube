@@ -154,6 +154,6 @@ create-dia-kustomizations: ## Create Flux Kustomizations for DIA manifests
 portal-enable-dia: ## Enable the DIA solution in the NetOpsKube Portal
 	@echo "--> PORTAL: Enabling DIA menu"
 	@$(KUBECTL) get configmap nok-apps-menu-config -n nok-base -o json | \
-	jq '.data["menu-config.json"] |= (fromjson | .featured |= map(. + {"openInNewTab": false}) | .solutions |= map(if .id == "nok-dia" then .deployed = "yes" | .services |= map(. + {"openInNewTab": false}) else . end) | tojson)' | \
+	jq '.data["menu-config.json"] |= (fromjson | .featured |= map(if .name == "BBM" then .openInNewTab = false else . end) | .solutions |= map(if .id == "nok-dia" then .deployed = "yes" | .services |= map(if .name == "Grafana" then .openInNewTab = false else . end) else . end) | tojson)' | \
 	$(KUBECTL) apply -f -
 	@$(KUBECTL) rollout restart deployment/nok-apps-portal-app -n nok-base
