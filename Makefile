@@ -347,7 +347,7 @@ wait-for-metallb-ready: ## Wait for the Kubernetes Metallb node to be ready
 
 .PHONY: install-bbm-pkg
 install-bbm-pkg: update-kpt-tuning-setters ## Installs the BBM (self-monitoring and observability) kpt package from ./nok-kpt/nok-bbm
-	@echo "--> INSTALL: [\033[1;34mBBM\033[0m] - Applying kpt package with setters"
+	@echo -e "--> INSTALL: [\033[1;34mBBM\033[0m] - Applying kpt package with setters"
 	@$(call INSTALL_KPT_PACKAGE_WITH_SETTERS,$(NOK_KPT_DIR)/nok-bbm,nok-bbm,"--reconcile-timeout=5m", "--inventory-policy=adopt")
 
 .PHONY: install-mcp-bng-pkg
@@ -537,9 +537,11 @@ gitea-add-ssh-key: wait-for-gitea-ready ## Add SSH key to Gitea
 .PHONY: flux-bootstrap
 flux-bootstrap: check-tools gitea-create-admin gitea-create-flux-repo gitea-add-ssh-key ## Bootstrap Flux using the Gitea Git repository
 	@echo "--> GITEA: Ensuring repository $(FLUX_GIT_REPO) exists"
-	@$(CURL) --resolve $(GITEA_HOST):80:$(GITEA_IP) -u "$(GITEA_ADMIN_USER):$(GITEA_ADMIN_PASS)" \
-	  http://$(GITEA_HOST)$(GITEA_HTTP_PATH)/api/v1/repos/$(GITEA_ADMIN_USER)/$(FLUX_GIT_REPO) \
-	  >/dev/null || \
+	@GITOPS_NAMESPACE="$(GITOPS_NAMESPACE)" GITEA_ADMIN_USER="$(GITEA_ADMIN_USER)" \
+	GITEA_ADMIN_PASS="$(GITEA_ADMIN_PASS)" KUBECTL="$(KUBECTL)" \
+	"$(BASE)/scripts/gitea-api.sh" "/repos/$(GITEA_ADMIN_USER)/$(FLUX_GIT_REPO)" >/dev/null || \
+	{ echo "Error: Gitea repo $(FLUX_GIT_REPO) not found — run 'make gitea-create-flux-repo'" >&2; exit 1; }
+
 	@echo "--> FLUX: Bootstrapping cluster"
 
 	@echo "--> SSH: Loading key into agent (prompts once if passphrase-protected)"
