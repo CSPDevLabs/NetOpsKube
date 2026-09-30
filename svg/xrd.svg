@@ -1,7 +1,17 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<svg xmlns="http://w3.org" width="42.666668" height="42.666668" viewBox="0 0 32 32" version="1.1" preserveAspectRatio="xMidYMid meet" id="svg839">
-  <title id="title833">router-solid</title>
-  <!-- Only the arrows filled with 80% opaque white -->
-  <path d="M 11.86,8.25 a 0.8,0.8 0 0 1 1.13,0 l 2.21,2.19 V 4.26 a 0.8,0.8 0 0 1 1.6,0 v 6.18 L 19,8.25 a 0.80257398,0.80257398 0 1 1 1.13,1.14 L 16,13.48 11.86,9.38 a 0.8,0.8 0 0 1 0,-1.13 z M 8.32,20.07 a 0.8,0.8 0 0 1 -1.13,0 L 3,16 7.19,11.91 a 0.8,0.8 0 1 1 1.12,1.14 l -2.2,2.14 h 6.27 a 0.8,0.8 0 0 1 0,1.6 H 6.11 l 2.2,2.15 a 0.8,0.8 0 0 1 0.01,1.13 z m 11.82,3.67 a 0.8,0.8 0 0 1 -1.13,0 L 16.8,21.56 v 6.17 a 0.8,0.8 0 0 1 -1.6,0 V 21.56 L 13,23.75 a 0.80257398,0.80257398 0 1 1 -1.13,-1.14 l 4.13,-4.1 4.14,4.1 a 0.8,0.8 0 0 1 0,1.13 z m 4.67,-3.66 a 0.8,0.8 0 1 1 -1.12,-1.14 l 2.2,-2.15 h -6.26 a 0.8,0.8 0 0 1 0,-1.6 h 6.27 l -2.2,-2.14 a 0.8,0.8 0 1 1 1.12,-1.14 L 29,16 Z" id="path835" fill="rgba(255, 255, 255, 0.8)" />
+<svg xmlns="http://www.w3.org/2000/svg" width="42.666668" height="42.666668" viewBox="0 0 32 32" version="1.1" preserveAspectRatio="xMidYMid meet">
+  <title>router-solid</title>
+  <defs>
+    <!-- The mask isolates the inner arrow cutouts perfectly without altering vector math -->
+    <mask id="arrow-only-mask">
+      <!-- 1. Make the circle region base white (visible) -->
+      <circle cx="16" cy="16" r="16" fill="#ffffff" />
+      <!-- 2. Overlay original path in black to invert the cutout into solid arrows -->
+      <path d="M 16,0 A 16,16 0 1 0 32,16 16,16 0 0 0 16,0 Z m -4.14,8.25 a 0.8,0.8 0 0 1 1.13,0 l 2.21,2.19 V 4.26 a 0.8,0.8 0 0 1 1.6,0 v 6.18 L 19,8.25 a 0.80257398,0.80257398 0 1 1 1.13,1.14 L 16,13.48 11.86,9.38 a 0.8,0.8 0 0 1 0,-1.13 z M 8.32,20.07 a 0.8,0.8 0 0 1 -1.13,0 L 3,16 7.19,11.91 a 0.8,0.8 0 1 1 1.12,1.14 l -2.2,2.14 h 6.27 a 0.8,0.8 0 0 1 0,1.6 H 6.11 l 2.2,2.15 a 0.8,0.8 0 0 1 0.01,1.13 z m 11.82,3.67 a 0.8,0.8 0 0 1 -1.13,0 L 16.8,21.56 v 6.17 a 0.8,0.8 0 0 1 -1.6,0 V 21.56 L 13,23.75 a 0.80257398,0.80257398 0 1 1 -1.13,-1.14 l 4.13,-4.1 4.14,4.1 a 0.8,0.8 0 0 1 0,1.13 z m 4.67,-3.66 a 0.8,0.8 0 1 1 -1.12,-1.14 l 2.2,-2.15 h -6.26 a 0.8,0.8 0 0 1 0,-1.6 h 6.27 l -2.2,-2.14 a 0.8,0.8 0 1 1 1.12,-1.14 L 29,16 Z" fill="#000000" />
+    </mask>
+  </defs>
+
+  <!-- This block renders your arrows using the mask, filled with 80% opaque white -->
+  <rect width="32" height="32" fill="rgba(255, 255, 255, 0.8)" mask="url(#arrow-only-mask)" />
 </svg>
 
