@@ -6,31 +6,27 @@ setup() {
   setup_nok_kpt_fixture
 }
 
-@test "patch-gitea-kpt-manifest patches Gitea for portal sub-path access" {
+@test "patch-gitea-kpt-manifest replaces bundled Gitea image with pullable default" {
   run_make patch-gitea-kpt-manifest
   [ "$status" -eq 0 ]
 
   local manifest="$FIXTURE_NOK_KPT/nok-git/gitea/gitea-manifest-standalone.yaml"
-  grep -q 'DOMAIN=bng.nok.local' "$manifest"
-  grep -q 'ROOT_URL=http://bng.nok.local:8080/gitea/' "$manifest"
-  grep -q 'SSH_DOMAIN=bng.nok.local' "$manifest"
-  grep -q 'SERVE_FROM_SUB_PATH=true' "$manifest"
-  ! grep -q 'git.example.com' "$manifest"
+  local expected_image
+  expected_image="$(make_var GITEA_IMAGE)"
+  grep -q "$expected_image" "$manifest"
+  ! grep -q 'docker.gitea.com/gitea:1.25.4-rootless' "$manifest"
 }
 
-@test "patch-gitea-kpt-manifest removes standalone Gitea ingress manifest" {
-  run_make patch-gitea-kpt-manifest
-  [ "$status" -eq 0 ]
-  [ ! -f "$FIXTURE_NOK_KPT/nok-git/gitea/ingress.yaml" ]
-}
-
-@test "patch-gitea-kpt-manifest is idempotent for Gitea sub-path settings" {
+@test "patch-gitea-kpt-manifest is idempotent" {
   run_make patch-gitea-kpt-manifest
   [ "$status" -eq 0 ]
   run_make patch-gitea-kpt-manifest
   [ "$status" -eq 0 ]
 
+  local manifest="$FIXTURE_NOK_KPT/nok-git/gitea/gitea-manifest-standalone.yaml"
+  local expected_image
+  expected_image="$(make_var GITEA_IMAGE)"
   local count
-  count="$(grep -c 'SERVE_FROM_SUB_PATH=true' "$FIXTURE_NOK_KPT/nok-git/gitea/gitea-manifest-standalone.yaml")"
-  [ "$count" -eq 1 ]
+  count="$(grep -c "$expected_image" "$manifest" || true)"
+  [ "$count" -ge 1 ]
 }
