@@ -10,9 +10,8 @@ update-kpt-lb-setters fails when nok-kpt directory is not a checkout
 show-kind-lb-setters prints detected prefix and apply-setters values
 show-kind-lb-setters fails when KinD prefix is empty
 
-patch-gitea-kpt-manifest patches Gitea for portal sub-path access
-patch-gitea-kpt-manifest removes standalone Gitea ingress manifest
-patch-gitea-kpt-manifest is idempotent for Gitea sub-path settings
+patch-gitea-kpt-manifest replaces bundled Gitea image with pullable default
+patch-gitea-kpt-manifest is idempotent
 
 GITEA_IP derives from KinD prefix and ingress host octet
 GITEA_SSH_HOST derives from KinD prefix and Gitea SSH host octet
