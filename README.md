@@ -335,15 +335,15 @@ make try-nok-dia
 After deploying the required solution, the NetOpsKube portal can be accessed through the exposed ingress service.
 
 ```text
-http://bng.nok.local:8080/
+http://portal.nok.local:8080/
 ```
 
-Add `bng.nok.local` to your `/etc/hosts` file so that your browser can resolve it.
+Add `portal.nok.local` to your `/etc/hosts` file so that your browser can resolve it.
 
 The BNG use case can also be tested locally using:
 
 ```bash
-curl --resolve bng.nok.local:8080:127.0.0.1 http://bng.nok.local:8080
+curl --resolve portal.nok.local:8080:127.0.0.1 http://portal.nok.local:8080
 ```
 
 </details>
@@ -414,7 +414,7 @@ Selecting **Keycloak** opens the Keycloak Master Admin Console in a new browser 
 **Keycloak Admin Console:**
 
 ```text
-http://bng.nok.local:8080/auth/admin/master/console
+http://portal.nok.local:8080/auth/admin/master/console
 ```
 
 ### Default Portal User

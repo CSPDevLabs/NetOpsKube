@@ -74,7 +74,7 @@ annotate-auth-ingress-bng: ## Configure OAuth authentication for the BNG ingress
 				-n nok-bng \
 				netopskube.io/bbm-oauth="true" \
 				nginx.ingress.kubernetes.io/auth-url="http://oauth2-proxy.nok-base.svc.cluster.local/oauth2/auth" \
-				nginx.ingress.kubernetes.io/auth-signin="http://bng.nok.local:8080/oauth2/start?rd=\$$escaped_request_uri" \
+				nginx.ingress.kubernetes.io/auth-signin="http://portal.nok.local:8080/oauth2/start?rd=\$$escaped_request_uri" \
 				--overwrite; \
 			$(KUBECTL) annotate ingress nok-apps-ingress \
 				-n nok-bng \
@@ -97,7 +97,7 @@ annotate-auth-ingress-base: ## Configure OAuth authentication for the Portal ing
 				-n nok-base \
 				netopskube.io/bbm-oauth="true" \
 				nginx.ingress.kubernetes.io/auth-url="http://oauth2-proxy.nok-base.svc.cluster.local/oauth2/auth" \
-				nginx.ingress.kubernetes.io/auth-signin="http://bng.nok.local:8080/oauth2/start?rd=\$$escaped_request_uri" \
+				nginx.ingress.kubernetes.io/auth-signin="http://portal.nok.local:8080/oauth2/start?rd=\$$escaped_request_uri" \
 				--overwrite; \
 			$(KUBECTL) annotate ingress nok-apps-portal-ingress \
 				-n nok-base \
@@ -119,7 +119,7 @@ annotate-auth-ingress-dia: ## Configure OAuth authentication for the DIA ingress
 				-n nok-dia \
 				netopskube.io/bbm-oauth="true" \
 				nginx.ingress.kubernetes.io/auth-url="http://oauth2-proxy.nok-base.svc.cluster.local/oauth2/auth" \
-				nginx.ingress.kubernetes.io/auth-signin="http://bng.nok.local:8080/oauth2/start?rd=\$$escaped_request_uri" \
+				nginx.ingress.kubernetes.io/auth-signin="http://portal.nok.local:8080/oauth2/start?rd=\$$escaped_request_uri" \
 				--overwrite; \
 			$(KUBECTL) annotate ingress nok-apps-ingress \
 				-n nok-dia \
@@ -141,7 +141,7 @@ annotate-auth-ingress-bbm: ## Configure OAuth authentication for the BBM ingress
 				-n nok-bbm \
 				netopskube.io/bbm-oauth="true" \
 				nginx.ingress.kubernetes.io/auth-url="http://oauth2-proxy.nok-base.svc.cluster.local/oauth2/auth" \
-				nginx.ingress.kubernetes.io/auth-signin="http://bng.nok.local:8080/oauth2/start?rd=\$$escaped_request_uri" \
+				nginx.ingress.kubernetes.io/auth-signin="http://portal.nok.local:8080/oauth2/start?rd=\$$escaped_request_uri" \
 				--overwrite; \
 			$(KUBECTL) annotate ingress bbm-ingress \
 				-n nok-bbm \
