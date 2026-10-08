@@ -110,6 +110,28 @@ annotate-auth-ingress-base: ## Configure OAuth authentication for the Portal ing
 		echo "--> AUTH: Keycloak disabled. Skipping BASE ingress annotation."; \
 	fi
 
+.PHONY: annotate-portal-gitea-ingress-base
+annotate-portal-gitea-ingress-base: ## Configure OAuth authentication for the Gitea ingress
+	@if [ "$(KEYCLOAK_ENABLED)" = "YES" ]; then \
+		if $(KUBECTL) get ingress portal-gitea-ingress -n nok-base >/dev/null 2>&1; then \
+			echo "--> AUTH: Updating nok-base/portal-gitea-ingress for OAuth probing"; \
+			$(KUBECTL) annotate ingress portal-gitea-ingress \
+				-n nok-base \
+				netopskube.io/bbm-oauth="true" \
+				nginx.ingress.kubernetes.io/auth-url="http://oauth2-proxy.nok-base.svc.cluster.local/oauth2/auth" \
+				nginx.ingress.kubernetes.io/auth-signin="http://portal.nok.local:8080/oauth2/start?rd=\$$escaped_request_uri" \
+				--overwrite; \
+			$(KUBECTL) annotate ingress portal-gitea-ingress \
+				-n nok-base \
+				netopskube.io/bbm- \
+				--overwrite; \
+		else \
+			echo "--> AUTH: Ingress nok-base/portal-gitea-ingress not found. Skipping."; \
+		fi; \
+	else \
+		echo "--> AUTH: Keycloak disabled. Skipping BASE ingress annotation."; \
+	fi
+
 .PHONY: annotate-auth-ingress-dia
 annotate-auth-ingress-dia: ## Configure OAuth authentication for the DIA ingress
 	@if [ "$(KEYCLOAK_ENABLED)" = "YES" ]; then \
@@ -154,40 +176,12 @@ annotate-auth-ingress-bbm: ## Configure OAuth authentication for the BBM ingress
 		echo "--> AUTH: Keycloak disabled. Skipping BBM ingress annotation."; \
 	fi
 
-.PHONY: annotate-auth-ingress-gitea
-annotate-auth-ingress-gitea: ## Configure OAuth authentication for the Gitea ingress
-	@if [ "$(KEYCLOAK_ENABLED)" = "YES" ]; then \
-		if $(KUBECTL) get ingress nok-gitea-ingress -n nok-git >/dev/null 2>&1; then \
-			echo "--> AUTH: Checking nok-git/nok-gitea-ingress OAuth annotation"; \
-			OAUTH_ENABLED=$$($(KUBECTL) get ingress nok-gitea-ingress \
-				-n nok-git \
-				-o jsonpath='{.metadata.annotations.netopskube\.io/bbm-oauth}'); \
-			if [ "$$OAUTH_ENABLED" = "true" ]; then \
-				echo "--> AUTH: netopskube.io/bbm-oauth=true already exists. Skipping annotation."; \
-			else \
-				echo "--> AUTH: Updating nok-git/nok-gitea-ingress for OAuth probing"; \
-				$(KUBECTL) annotate ingress nok-gitea-ingress \
-					-n nok-git \
-					netopskube.io/bbm-oauth="true" \
-					--overwrite; \
-				$(KUBECTL) annotate ingress nok-gitea-ingress \
-					-n nok-git \
-					netopskube.io/bbm- \
-					--overwrite; \
-			fi; \
-		else \
-			echo "--> AUTH: Ingress nok-git/nok-gitea-ingress not found. Skipping."; \
-		fi; \
-	else \
-		echo "--> AUTH: Keycloak disabled. Skipping Gitea ingress annotation."; \
-	fi
-
 
 .PHONY: configure-auth
 
 ifeq ($(KEYCLOAK_ENABLED),YES)
 
-configure-auth: clone-keycloak-repo deploy-auth portal-enable-keycloak annotate-auth-ingress-base annotate-auth-ingress-bbm annotate-auth-ingress-bng annotate-auth-ingress-dia annotate-auth-ingress-gitea ## Configure authentication and Keycloak
+configure-auth: clone-keycloak-repo deploy-auth portal-enable-keycloak annotate-auth-ingress-base annotate-portal-gitea-ingress-base annotate-auth-ingress-bbm ## Configure authentication and Keycloak
 
 else
 
@@ -199,7 +193,7 @@ endif
 .PHONY: disable-auth
 disable-auth: ## Disable Keycloak and OAuth2 Proxy while preserving their state
 	@echo "--> AUTH: Removing OAuth annotations from application ingresses"
-	@for item in nok-base:nok-apps-portal-ingress nok-bbm:bbm-ingress nok-bng:nok-apps-ingress nok-dia:nok-apps-ingress nok-git:nok-gitea-ingress; do \
+	@for item in nok-base:nok-apps-portal-ingress nok-base:portal-gitea-ingress nok-bbm:bbm-ingress nok-bng:nok-apps-ingress nok-dia:nok-apps-ingress; do \
 		namespace=$${item%%:*}; ingress=$${item##*:}; \
 		if $(KUBECTL) get ingress "$$ingress" -n "$$namespace" >/dev/null 2>&1; then \
 			$(KUBECTL) annotate ingress "$$ingress" -n "$$namespace" \

@@ -21,7 +21,7 @@ BNG_MANIFESTS_DIR := $(NOK_CLABS_DIR)/nok-bng/nok-manifests
 BNG_REPO_URL = ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_BNG_REPO).git
 
 .PHONY: try-nok-bng
-try-nok-bng: install-bng-pkg gitops-bng-kustomization portal-enable-bng annotate-auth-ingress-bng annotate-auth-ingress-gitea ## Deploy the BNG solution
+try-nok-bng: install-bng-pkg gitops-bng-kustomization portal-enable-bng annotate-auth-ingress-bng ## Deploy the BNG solution
 
 .PHONY: gitops-bng-kustomization
 gitops-bng-kustomization: gitea-create-bng-repo gitea-create-grafana-dashboards-repo flux-create-bng-secret push-bng-manifests push-bng-grafana-dashboards flux-create-bng-source create-bng-kustomizations ## Synchronize BNG manifests with Flux
