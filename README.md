@@ -407,15 +407,9 @@ When enabled, NetOpsKube deploys the required authentication components, includi
 
 ### Access Keycloak
 
-After authentication is enabled, the **Keycloak** option is available from the NetOpsKube Portal.
+After authentication is enabled, the **Keycloak** option is available within the NetOpsKube Portal.
 
-Selecting **Keycloak** opens the Keycloak Master Admin Console in a new browser tab.
-
-**Keycloak Admin Console:**
-
-```text
-http://portal.nok.local:8080/auth/admin/master/console
-```
+Selecting **Keycloak** opens the Keycloak Master Admin Console.
 
 ### Default Portal User
 
