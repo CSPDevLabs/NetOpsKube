@@ -65,7 +65,7 @@ DIA GitOps kustomizations use prefix `dia-` (e.g. `dia-prometheus`) to avoid col
 
 ## CI
 
-CI (workflow `.github/workflows/unit-tests.yml`) runs on push to `main` and on pull requests:
+CI (workflow `.github/workflows/unit-tests.yml`) runs on **push to `main`** only (typically after a PR merge). Run `make test` and `make test-kpt` locally on feature branches before merge.
 
 1. NetOpsKube `make test` (BATS unit + coverage)
 2. kpt `make test` (package validation)

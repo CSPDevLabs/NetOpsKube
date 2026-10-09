@@ -248,10 +248,10 @@ setup() {
 
 ## CI
 
-CI unit tests (workflow `.github/workflows/unit-tests.yml`) run on **push to `main`** and on **pull requests** (see [docs/unit-tests.md](../docs/unit-tests.md)):
+CI unit tests (workflow `.github/workflows/unit-tests.yml`) run on **push to `main`** only (see [docs/unit-tests.md](../docs/unit-tests.md)):
 
 1. NetOpsKube `make test` (BATS unit + coverage)
 2. kpt recipe validation (`make test` or `test/validate-recipes.sh`)
 3. nok-controller `pytest`
 
-Feature branches without an open PR are not built on push (avoids duplicate runs with `pull_request`). Open a PR to get CI on a feature branch.
+Feature branches and open PRs do not trigger this workflow. Run `make test` and `make test-kpt` locally before you merge.
