@@ -7,7 +7,7 @@ Per-recipe automated health/integration tests on deploy. Baseline recipes: **BNG
 | Repo | Layer | Command | Cluster? |
 |------|-------|---------|------------|
 | **kpt** | Package validation (manifests, setters) | `make test` | No |
-| **netopskube** | Orchestration unit + recipe verify | `make test-epic9` / `make test-recipes` | Unit: no; recipes: yes |
+| **netopskube** | Orchestration unit + recipe verify | `make test` / `make test-kpt` / `make test-recipes` | Unit: no; recipes: yes |
 | **nok-controller** | Component unit tests | `pytest` | No |
 
 ## Quick start (no cluster)
@@ -17,7 +17,7 @@ Per-recipe automated health/integration tests on deploy. Baseline recipes: **BNG
 cd kpt && make test
 
 # netopskube — unit tests + kpt validation (sibling kpt checkout or KPT_ROOT)
-cd netopskube && make test-epic9
+cd netopskube && make test && make test-kpt
 
 # nok-controller — Python unit tests
 cd nok-controller && pip install -r requirements.txt pytest pytest-flask pytest-mock && pytest
@@ -52,7 +52,7 @@ NOK_RECIPE_VERIFY_LEVEL=full make verify-recipe-bng
 
 `verify-before-publish-bng` and `verify-before-publish-dia` run install-level `verify-recipe-*` only when **`NOK_VERIFY_BEFORE_PUBLISH=yes`** (default: **no**).
 
-They are **not** attached to `push-bng-manifests` / `push-dia-manifests`. Publish behavior is unchanged from pre–Epic 9 installs.
+They are **not** attached to `push-bng-manifests` / `push-dia-manifests`. Publish behavior is unchanged from earlier installs.
 
 ```bash
 # Optional, explicit gate before you push manifests yourself:
@@ -65,7 +65,7 @@ DIA GitOps kustomizations use prefix `dia-` (e.g. `dia-prometheus`) to avoid col
 
 ## CI
 
-`.github/workflows/epic9-test.yml` runs on push to `main` and on pull requests:
+CI (workflow `.github/workflows/epic9-test.yml`) runs on push to `main` and on pull requests:
 
 1. NetOpsKube `make test` (BATS unit + coverage)
 2. kpt `make test` (package validation)
@@ -75,5 +75,5 @@ DIA GitOps kustomizations use prefix `dia-` (e.g. `dia-prometheus`) to avoid col
 
 ## See also
 
-- `test/README.md` — operator test guide (BATS, recipes, CI)
+- `test/README.md` — operator test guide (run targets, **contributing new BATS tests**, recipes, CI)
 - `make help-recipe-verify` — all verify targets
