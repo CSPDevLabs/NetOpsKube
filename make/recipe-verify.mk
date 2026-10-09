@@ -1,5 +1,5 @@
 # ----------------------------------------------------------------------------
-# Per-recipe integration verification (Epic 9)
+# Per-recipe integration verification
 #
 # Validates recipe health after deploy: pod availability, portal /healthz,
 # Prometheus readiness, and (full level) gNMIc subscriptions + metrics flow.
@@ -172,7 +172,7 @@ verify-recipe-metrics: $(KUBECTL) ## Verify Prometheus is scraping gNMIc metrics
 	fi; \
 	echo "[PASS] Prometheus reports $$SAMPLE_COUNT gNMIc metric series"
 
-# Gate manifest publishing on recipe health (Epic 9 — surface broken recipes before publish)
+# Gate manifest publishing on recipe health (surface broken recipes before publish)
 .PHONY: verify-before-publish-bng verify-before-publish-dia
 verify-before-publish-bng:
 	@if [ "$(NOK_VERIFY_BEFORE_PUBLISH)" = "yes" ]; then \

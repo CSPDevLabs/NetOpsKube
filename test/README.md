@@ -248,7 +248,7 @@ setup() {
 
 ## CI
 
-CI unit tests (workflow `.github/workflows/epic9-test.yml`) run on **push to `main`** and on **pull requests** (see [docs/unit-tests.md](../docs/unit-tests.md)):
+CI unit tests (workflow `.github/workflows/unit-tests.yml`) run on **push to `main`** and on **pull requests** (see [docs/unit-tests.md](../docs/unit-tests.md)):
 
 1. NetOpsKube `make test` (BATS unit + coverage)
 2. kpt recipe validation (`make test` or `test/validate-recipes.sh`)

@@ -1,4 +1,4 @@
-name: NetOpsKube tests (Epic 9)
+name: NetOpsKube tests
 
 on:
   push:
