@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 
-# BNG recipe integration tests (Epic 9).
+# BNG recipe integration tests.
 # Require a deployed KinD cluster with install-bng-pkg (or try-nok-bng).
 # Skipped unless NOK_RUN_INTEGRATION_TESTS=yes.
 

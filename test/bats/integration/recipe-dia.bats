@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 
-# DIA recipe integration tests (Epic 9).
+# DIA recipe integration tests.
 # Require a deployed KinD cluster with install-dia-pkg (or try-nok-dia).
 # Skipped unless NOK_RUN_INTEGRATION_TESTS=yes.
 

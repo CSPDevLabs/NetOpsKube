@@ -65,7 +65,7 @@ DIA GitOps kustomizations use prefix `dia-` (e.g. `dia-prometheus`) to avoid col
 
 ## CI
 
-CI (workflow `.github/workflows/epic9-test.yml`) runs on push to `main` and on pull requests:
+CI (workflow `.github/workflows/unit-tests.yml`) runs on push to `main` and on pull requests:
 
 1. NetOpsKube `make test` (BATS unit + coverage)
 2. kpt `make test` (package validation)
