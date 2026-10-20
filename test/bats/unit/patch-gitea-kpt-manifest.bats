@@ -6,6 +6,7 @@ setup() {
   setup_nok_kpt_fixture
 }
 
+# bats test_tags=req:GITEA-01
 @test "patch-gitea-kpt-manifest replaces bundled Gitea image with pullable default" {
   run_make patch-gitea-kpt-manifest
   [ "$status" -eq 0 ]
@@ -17,6 +18,7 @@ setup() {
   ! grep -q 'docker.gitea.com/gitea:1.25.4-rootless' "$manifest"
 }
 
+# bats test_tags=req:GITEA-01
 @test "patch-gitea-kpt-manifest is idempotent" {
   run_make patch-gitea-kpt-manifest
   [ "$status" -eq 0 ]

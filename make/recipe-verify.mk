@@ -11,7 +11,7 @@
 #
 # Optional pre-publish check (not wired to push-*-manifests — run explicitly when desired):
 #   NOK_VERIFY_BEFORE_PUBLISH=yes make verify-before-publish-bng
-# See test/README.md
+# See docs/TESTING.md
 # ----------------------------------------------------------------------------
 
 RECIPE ?= bng
@@ -21,29 +21,29 @@ PORTAL_HOST ?= bng.nok.local
 INGRESS_LOCAL_PORT ?= 8080
 RECIPE_POD_WAIT_TIMEOUT ?= 5m
 
-ifeq ($(RECIPE),bng)
-  RECIPE_NS := nok-bng
-  RECIPE_LABEL := BNG
-else ifeq ($(RECIPE),dia)
-  RECIPE_NS := nok-dia
-  RECIPE_LABEL := DIA
-else
-  $(error RECIPE must be bng or dia (got '$(RECIPE)'))
-endif
+RECIPE_NS = $(if $(filter bng,$(RECIPE)),nok-bng,$(if $(filter dia,$(RECIPE)),nok-dia,))
+RECIPE_LABEL = $(if $(filter bng,$(RECIPE)),BNG,$(if $(filter dia,$(RECIPE)),DIA,))
 
 .PHONY: help-recipe-verify
 help-recipe-verify: ## List per-recipe verification targets
 	@grep -E '^[a-zA-Z0-9_.-]+:.*?## .*$$' make/recipe-verify.mk | sort \
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-35s\033[0m %s\n", $$1, $$2}'
 
-.PHONY: verify-recipe-bng verify-recipe-dia verify-recipe
+.PHONY: verify-recipe-bng verify-recipe-dia verify-recipe verify-recipe-name-check
 verify-recipe-bng: ## Run install-level checks for the BNG recipe (set NOK_RECIPE_VERIFY_LEVEL=full for metrics)
 	@$(MAKE) verify-recipe RECIPE=bng
 
 verify-recipe-dia: ## Run install-level checks for the DIA recipe (set NOK_RECIPE_VERIFY_LEVEL=full for metrics)
 	@$(MAKE) verify-recipe RECIPE=dia
 
-verify-recipe: check-tools ## Verify recipe health (RECIPE=bng|dia, NOK_RECIPE_VERIFY_LEVEL=install|full)
+verify-recipe-name-check:
+	@case "$(RECIPE)" in \
+		bng|dia) ;; \
+		*) echo "Error: RECIPE must be bng or dia (got '$(RECIPE)')" >&2; exit 1 ;; \
+	esac
+
+verify-recipe: verify-recipe-name-check check-tools ## Verify recipe health (RECIPE=bng|dia, NOK_RECIPE_VERIFY_LEVEL=install|full)
+	@test -n "$(RECIPE_NS)" || { echo "Error: RECIPE must be bng or dia (got '$(RECIPE)')" >&2; exit 1; }
 	@echo "--> RECIPE [$(RECIPE_LABEL)]: Starting $(NOK_RECIPE_VERIFY_LEVEL)-level verification in namespace '$(RECIPE_NS)'"
 	@$(MAKE) verify-recipe-controller
 	@$(MAKE) verify-recipe-pods RECIPE=$(RECIPE)

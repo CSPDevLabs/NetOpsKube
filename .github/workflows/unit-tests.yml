@@ -19,10 +19,7 @@ jobs:
           ref: feat/portal-embedding
           path: kpt
 
-      - name: Install bats
-        run: sudo apt-get update && sudo apt-get install -y bats
-
-      - name: Run unit tests and coverage gate
+      - name: Run unit tests and requirement checks
         env:
           KPT_ROOT: ${{ github.workspace }}/kpt
         run: make test
@@ -38,8 +35,9 @@ jobs:
 
       - name: Install yq
         run: |
-          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64
-          sudo chmod +x /usr/local/bin/yq
+          curl -fsSL -o yq https://github.com/mikefarah/yq/releases/download/v4.42.1/yq_linux_amd64
+          echo "1a95960dddd426321354d58d2beac457717f7c49a9ec0806749a5a9e400eb45e  yq" | sha256sum -c -
+          sudo install -m 0755 yq /usr/local/bin/yq
 
       - name: Validate BNG and DIA kpt packages
         working-directory: kpt

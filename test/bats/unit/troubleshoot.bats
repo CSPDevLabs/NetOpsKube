@@ -2,6 +2,7 @@
 
 load '../../helpers/common.bash'
 
+# bats test_tags=req:HELP-01
 @test "help-troubleshoot lists troubleshooting targets" {
   run make -C "$NETOPSKUBE_ROOT" help-troubleshoot
   [ "$status" -eq 0 ]
@@ -10,6 +11,7 @@ load '../../helpers/common.bash'
   [[ "$output" == *"restart-gnmic-collector"* ]]
 }
 
+# bats test_tags=req:GNMIC-01
 @test "verify-gnmic-subscriptions warns when no targets exist" {
   mock_kubectl_no_gnmic_targets
   run make -C "$NETOPSKUBE_ROOT" verify-gnmic-subscriptions \

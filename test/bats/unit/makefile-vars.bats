@@ -2,16 +2,19 @@
 
 load '../../helpers/common.bash'
 
+# bats test_tags=req:NET-01
 @test "GITEA_IP derives from KinD prefix and ingress host octet" {
   [ "$(make_var GITEA_IP KIND_NET_PREFIX=172.30.0)" = "172.30.0.100" ]
   [ "$(make_var GITEA_IP KIND_NET_PREFIX=172.19.0)" = "172.19.0.100" ]
 }
 
+# bats test_tags=req:NET-01
 @test "GITEA_SSH_HOST derives from KinD prefix and Gitea SSH host octet" {
   [ "$(make_var GITEA_SSH_HOST KIND_NET_PREFIX=172.30.0)" = "172.30.0.102" ]
   [ "$(make_var GITEA_SSH_HOST KIND_NET_PREFIX=172.19.0)" = "172.19.0.102" ]
 }
 
+# bats test_tags=req:CFG-01
 @test "KinD LB host octets use expected defaults" {
   [ "$(make_var KIND_LB_INGRESS_HOST)" = "100" ]
   [ "$(make_var KIND_LB_GITEA_SSH_HOST)" = "102" ]
@@ -19,6 +22,7 @@ load '../../helpers/common.bash'
   [ "$(make_var KIND_LB_DIA_SYSLOG_HOST)" = "103" ]
 }
 
+# bats test_tags=req:CFG-01
 @test "Gitea and GitOps Makefile defaults are set" {
   [ "$(make_var GITEA_HOST)" = "bng.nok.local" ]
   [ "$(make_var GITEA_HTTP_PATH)" = "/gitea" ]
@@ -26,4 +30,10 @@ load '../../helpers/common.bash'
   [ "$(make_var KIND_LB_DEFAULT_PREFIX)" = "172.18.0" ]
   [ "$(make_var KIND_LB_POOL_START)" = "100" ]
   [ "$(make_var KIND_LB_POOL_END)" = "120" ]
+}
+
+# bats test_tags=req:TOOL-01
+@test "check-tools includes the pinned Bats executable" {
+  [ "$(make_var BATS_VERSION)" = "1.11.1" ]
+  [ "$(make_var BATS)" = "${NETOPSKUBE_ROOT}/tools/bats/bin/bats" ]
 }

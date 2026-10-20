@@ -6,6 +6,7 @@ setup() {
   setup_nok_kpt_fixture
 }
 
+# bats test_tags=req:LB-01
 @test "update-kpt-lb-setters writes LB IPs for a non-default KinD prefix" {
   run_make update-kpt-lb-setters KIND_NET_PREFIX=172.30.0
   [ "$status" -eq 0 ]
@@ -18,6 +19,7 @@ setup() {
   [ "$(yq_get "$FIXTURE_NOK_KPT/nok-git/apply-setters.yaml" gitea-ssh-lb-ip)" = "172.30.0.102" ]
 }
 
+# bats test_tags=req:LB-01
 @test "update-kpt-lb-setters overwrites an existing prefix idempotently" {
   run_make update-kpt-lb-setters KIND_NET_PREFIX=172.19.0
   [ "$status" -eq 0 ]
@@ -26,6 +28,7 @@ setup() {
   [ "$(yq_get "$FIXTURE_NOK_KPT/nok-base/apply-setters.yaml" ingress-lb-ip)" = "172.30.0.100" ]
 }
 
+# bats test_tags=req:LB-01
 @test "update-kpt-lb-setters writes default template prefix 172.18.0" {
   run_make update-kpt-lb-setters KIND_NET_PREFIX=172.18.0
   [ "$status" -eq 0 ]
@@ -33,12 +36,14 @@ setup() {
   [ "$(yq_get "$FIXTURE_NOK_KPT/nok-lb/apply-setters.yaml" metallb-pool-range)" = "172.18.0.100-172.18.0.120" ]
 }
 
+# bats test_tags=req:LB-02
 @test "update-kpt-lb-setters fails when KinD prefix is empty" {
   run_make update-kpt-lb-setters KIND_NET_PREFIX=""
   [ "$status" -ne 0 ]
   [[ "$output" == *"cannot detect network prefix"* ]]
 }
 
+# bats test_tags=req:LB-02
 @test "update-kpt-lb-setters fails when nok-kpt directory is not a checkout" {
   local bad_kpt="${BATS_TEST_TMPDIR:-${TMPDIR:-/tmp}/bats-$$}/not-kpt"
   mkdir -p "$bad_kpt"

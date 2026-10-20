@@ -2,6 +2,7 @@
 
 load '../../helpers/common.bash'
 
+# bats test_tags=req:CLAB-01
 @test "check-clab-prerequisites passes when image and license exist" {
   mock_docker_with_image
   local tmpdir="${BATS_TEST_TMPDIR:-${TMPDIR:-/tmp}/bats-$$}"
@@ -15,6 +16,7 @@ load '../../helpers/common.bash'
   [[ "$output" == *"Nokia SROS license file found."* ]]
 }
 
+# bats test_tags=req:CLAB-01
 @test "check-clab-prerequisites fails when license file is missing" {
   mock_docker_with_image
   local tmpdir="${BATS_TEST_TMPDIR:-${TMPDIR:-/tmp}/bats-$$}"

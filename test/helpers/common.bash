@@ -1,13 +1,16 @@
 # Shared helpers for NetOpsKube BATS tests.
+bats_require_minimum_version 1.8.0
 
 # Repo root (netopskube/), three levels up from test/bats/unit/*.bats
 NETOPSKUBE_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/../../.." && pwd)"
 export NETOPSKUBE_ROOT
 
-# kpt checkout for recipe package assertions (local ../kpt, CI kpt/, or KPT_ROOT).
+# kpt checkout for recipe package assertions (nok-kpt/, local ../kpt, CI kpt/, or KPT_ROOT).
 kpt_root_for_tests() {
   if [[ -n "${KPT_ROOT:-}" && -d "$KPT_ROOT" ]]; then
     echo "$KPT_ROOT"
+  elif [[ -d "${NETOPSKUBE_ROOT}/nok-kpt" ]]; then
+    echo "${NETOPSKUBE_ROOT}/nok-kpt"
   elif [[ -d "${NETOPSKUBE_ROOT}/kpt" ]]; then
     echo "${NETOPSKUBE_ROOT}/kpt"
   elif [[ -d "${NETOPSKUBE_ROOT}/../kpt" ]]; then
@@ -63,7 +66,7 @@ yq_get() {
 }
 
 setup_mock_bin() {
-  MOCK_BIN="${BATS_TEST_TMPDIR}/bin"
+  MOCK_BIN="${BATS_TEST_TMPDIR:-${TMPDIR:-/tmp}/bats-$$}/bin"
   mkdir -p "$MOCK_BIN"
   export MOCK_BIN
   export PATH="${MOCK_BIN}:${PATH}"
@@ -77,7 +80,8 @@ if [[ "$1" == "images" && "$2" == "-q" ]]; then
   echo "fake-srsim-image-id"
   exit 0
 fi
-exec command docker "$@"
+echo "unmocked call: $*" >&2
+exit 99
 EOF
   chmod +x "${MOCK_BIN}/docker"
 }
@@ -89,7 +93,8 @@ mock_docker_without_image() {
 if [[ "$1" == "images" && "$2" == "-q" ]]; then
   exit 0
 fi
-exec command docker "$@"
+echo "unmocked call: $*" >&2
+exit 99
 EOF
   chmod +x "${MOCK_BIN}/docker"
 }
@@ -101,7 +106,8 @@ mock_kubectl_no_gnmic_targets() {
 if [[ "$*" == *"targets.operator.gnmic.dev"* && "$*" == *"jsonpath"* ]]; then
   exit 0
 fi
-exec command kubectl "$@"
+echo "unmocked call: $*" >&2
+exit 99
 EOF
   chmod +x "${MOCK_BIN}/kubectl"
 }
