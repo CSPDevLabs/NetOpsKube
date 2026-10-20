@@ -2,6 +2,7 @@
 
 load '../../helpers/common.bash'
 
+# bats test_tags=req:CLONE-01
 @test "git-clone-kpt skips clone when nok-kpt already exists" {
   local kpt_dir="${BATS_TEST_TMPDIR:-${TMPDIR:-/tmp}/bats-$$}/nok-kpt"
   mkdir -p "$kpt_dir/nok-base"
@@ -12,6 +13,7 @@ load '../../helpers/common.bash'
   [[ "$output" == *"main"* ]]
 }
 
+# bats test_tags=req:CLONE-01
 @test "git-clone-clab skips clone when nok-clabs already exists" {
   local clabs_dir="${BATS_TEST_TMPDIR:-${TMPDIR:-/tmp}/bats-$$}/nok-clabs"
   mkdir -p "$clabs_dir"

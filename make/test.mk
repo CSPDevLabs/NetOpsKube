@@ -3,34 +3,24 @@
 #
 # Unit tests are fast and do not require a KinD cluster.
 # Integration / smoke tests require a deployed environment.
-# See test/README.md
+# See docs/TESTING.md
 # ----------------------------------------------------------------------------
 
-BATS ?= bats
 TEST_DIR ?= $(BASE)/test
 
-.PHONY: test test-unit test-integration test-smoke test-coverage test-recipe-bng test-recipe-dia test-recipes test-kpt
-test: test-unit test-coverage ## Run default test suite and verify 100% unit scope coverage
+.PHONY: test test-unit test-integration test-smoke test-requirements test-recipe-bng test-recipe-dia test-recipes test-kpt
+test: test-unit test-requirements ## Run unit tests and verify all documented requirements
 
-test-unit: $(YQ) ## Run BATS unit tests (no cluster required)
-	@command -v $(BATS) >/dev/null 2>&1 || { \
-		echo "Error: 'bats' not found. Install with: sudo apt install bats"; \
-		exit 1; \
-	}
+test-unit: $(YQ) $(BATS) ## Run BATS unit tests (no cluster required)
 	@echo "--> TEST: Running BATS unit tests"
-	@TERM=$${TERM:-dumb} $(BATS) $(TEST_DIR)/bats/unit/
+	@KPT_ROOT="$${KPT_ROOT:-$(NOK_KPT_DIR)}" TERM=$${TERM:-dumb} $(BATS) $(TEST_DIR)/bats/unit/
 	@echo ""
 	@echo "--> TEST: Unit tests completed successfully."
 
-test-coverage: ## Verify 100% unit-test scope coverage (see test/coverage/unit-scope.txt)
-	@chmod +x $(TEST_DIR)/scripts/verify-coverage.sh
-	@$(TEST_DIR)/scripts/verify-coverage.sh
+test-requirements: ## Verify unit tests are tagged for every documented requirement
+	@bash $(TEST_DIR)/scripts/verify-requirements.sh
 
-test-integration: check-tools ## Run BATS integration tests (cluster required)
-	@command -v $(BATS) >/dev/null 2>&1 || { \
-		echo "Error: 'bats' not found. Install with: sudo apt install bats"; \
-		exit 1; \
-	}
+test-integration: check-tools $(BATS) ## Run BATS integration tests (cluster required)
 	@echo "--> TEST: Running BATS integration tests"
 	@TERM=$${TERM:-dumb} $(BATS) $(TEST_DIR)/bats/integration/
 	@echo ""
@@ -56,14 +46,12 @@ test-recipe-dia: check-tools ## Run DIA recipe integration checks (cluster requi
 
 test-recipes: test-recipe-bng test-recipe-dia ## Run install-level checks for BNG and DIA recipes
 
-KPT_VALIDATE_DIR ?= $(dir $(NOK_KPT_DIR))
-test-kpt: ## Run kpt recipe package validation (sibling kpt repo or NOK_KPT_DIR)
+KPT_VALIDATE_DIR ?= $(NOK_KPT_DIR)
+test-kpt: $(YQ) ## Run kpt recipe package validation (NOK_KPT_DIR or KPT_VALIDATE_DIR)
 	@if [ -x "$(KPT_VALIDATE_DIR)/test/validate-recipes.sh" ]; then \
 		echo "--> TEST: Running kpt recipe validation in $(KPT_VALIDATE_DIR)"; \
 		YQ="$(YQ)" "$(KPT_VALIDATE_DIR)/test/validate-recipes.sh"; \
-	elif [ -x "$(BASE)/../kpt/test/validate-recipes.sh" ]; then \
-		echo "--> TEST: Running kpt recipe validation in $(BASE)/../kpt"; \
-		YQ="$(YQ)" "$(BASE)/../kpt/test/validate-recipes.sh"; \
 	else \
-		echo "[WARN] kpt validate-recipes.sh not found — skip (set KPT_VALIDATE_DIR)"; \
+		echo "Error: kpt validate-recipes.sh not found in $(KPT_VALIDATE_DIR) (set KPT_VALIDATE_DIR to a kpt checkout)" >&2; \
+		exit 1; \
 	fi

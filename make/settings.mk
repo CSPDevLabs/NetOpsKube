@@ -93,6 +93,10 @@ TOOLS ?= $(BASE)/tools
 KIND ?= $(TOOLS)/kind
 KUBECTL ?= $(TOOLS)/kubectl
 YQ ?= $(TOOLS)/yq
+BATS_VERSION ?= 1.11.1
+BATS_SHA256 ?= 5c57ed9616b78f7fd8c553b9bae3c7c9870119edd727ec17dbd1185c599f79d9
+BATS_HOME ?= $(TOOLS)/bats
+BATS ?= $(BATS_HOME)/bin/bats
 HELM ?= $(TOOLS)/helm
 KPT ?= $(TOOLS)/kpt
 K9S ?= $(TOOLS)/k9s
@@ -138,6 +142,7 @@ HELM_SRC ?= https://get.helm.sh/helm-$(HELM_VERSION)-$(OS)-$(ARCH).tar.gz
 KPT_SRC ?= https://github.com/GoogleContainerTools/kpt/releases/download/$(KPT_VERSION)/kpt_$(OS)_$(ARCH)
 K9S_SRC ?= https://github.com/derailed/k9s/releases/download/$(K9S_VERSION)/k9s_$(UNAME)_$(ARCH).tar.gz
 YQ_SRC ?= https://github.com/mikefarah/yq/releases/download/$(YQ_VERSION)/yq_$(OS)_$(ARCH)
+BATS_SRC ?= https://github.com/bats-core/bats-core/archive/refs/tags/v$(BATS_VERSION).tar.gz
 CLAB_SRC ?= https://github.com/srl-labs/containerlab/releases/download/v$(CLAB_VERSION)/containerlab_$(CLAB_VERSION)_$(OS)_$(ARCH).tar.gz
 FLUX_SRC ?= https://github.com/fluxcd/flux2/releases/download/v$(FLUX_VERSION)/flux_$(FLUX_VERSION)_$(OS)_$(ARCH).tar.gz
 
@@ -262,7 +267,35 @@ $(K9S): | $(BASE) $(TOOLS) ; $(info --> TOOLS: Ensuring k9s is present in $(K9S)
 	@$(call download-bin-from-archive,$(K9S),$(K9S_SRC),$(TOOLS),k9s,z)
 
 $(YQ): | $(BASE) $(TOOLS) ; $(info --> TOOLS: Ensuring yq is present in $(YQ))
-	@$(call download-bin,$(YQ),$(YQ_SRC))
+	@if test ! -f "$(YQ)"; then \
+		set -e; \
+		temp_file=$$(mktemp); \
+		checksums=$$(mktemp); \
+		trap 'rm -f "$$temp_file" "$$checksums"' EXIT; \
+		$(CURL) -Lo "$$temp_file" "$(YQ_SRC)"; \
+		$(CURL) -Lo "$$checksums" "https://github.com/mikefarah/yq/releases/download/$(YQ_VERSION)/checksums"; \
+		expected=$$(awk -v file="yq_$(OS)_$(ARCH)" '$$1 == file { print $$19 }' "$$checksums"); \
+		if [ -z "$$expected" ]; then echo "Error: no SHA-256 checksum for yq_$(OS)_$(ARCH)" >&2; exit 1; fi; \
+		if command -v sha256sum >/dev/null 2>&1; then hash_cmd="sha256sum"; else hash_cmd="shasum -a 256"; fi; \
+		printf '%s  %s\n' "$$expected" "$$temp_file" | $$hash_cmd -c -; \
+		install -m 0755 "$$temp_file" "$(YQ)"; \
+	fi
+
+$(BATS): | $(BASE) $(TOOLS) ; $(info --> TOOLS: Ensuring Bats $(BATS_VERSION) is present in $(BATS))
+	@if test -x "$(BATS)" && ! "$(BATS)" --version | grep -q "^Bats $(BATS_VERSION)$$"; then \
+		echo "    Replacing Bats with version $(BATS_VERSION)"; \
+		rm -f "$(BATS)"; \
+	fi
+	@if test ! -x "$(BATS)"; then \
+		set -e; \
+		temp_dir=$$(mktemp -d); \
+		trap 'rm -rf "$$temp_dir"' EXIT; \
+		$(CURL) -Lo "$$temp_dir/bats.tar.gz" "$(BATS_SRC)"; \
+		if command -v sha256sum >/dev/null 2>&1; then hash_cmd="sha256sum"; else hash_cmd="shasum -a 256"; fi; \
+		printf '%s  %s\n' "$(BATS_SHA256)" "$$temp_dir/bats.tar.gz" | $$hash_cmd -c -; \
+		tar -xzf "$$temp_dir/bats.tar.gz" -C "$$temp_dir"; \
+		"$$temp_dir/bats-core-$(BATS_VERSION)/install.sh" "$(BATS_HOME)"; \
+	fi
 
 $(GH): | $(BASE) $(TOOLS) ; $(info --> TOOLS: Ensuring gh is present in $(GH))
 	@$(call download-bin-from-archive,$(GH),$(GH_SRC),$(TOOLS),gh_$(GH_VERSION)_$(GH_OS_ARCH)/bin/gh,z,2)

@@ -193,7 +193,7 @@ delete-cluster: ## Delete the KinD cluster
 	@rm -f $(KIND_LAUNCH_CONFIG)
 
 .PHONY: check-tools
-check-tools: $(KIND) $(KUBECTL) $(YQ) $(HELM) $(KPT) $(K9S) $(GH) $(CLAB) $(FLUX) create-tool-aliases ## Ensure all required tools are present and aliased
+check-tools: $(KIND) $(KUBECTL) $(YQ) $(BATS) $(HELM) $(KPT) $(K9S) $(GH) $(CLAB) $(FLUX) create-tool-aliases ## Ensure all required tools are present and aliased
 	@command -v rsync >/dev/null 2>&1 || { echo "ERROR: rsync is required (install rsync package)" >&2; exit 1; }
 	@echo "--> All required tools found or downloaded."
 
@@ -304,6 +304,7 @@ $(KIND_CONFIG_REAL_LOC):
 	@echo "        certSANs:" >> $(KIND_CONFIG_REAL_LOC)
 	@echo "          - \"0.0.0.0\"" >> $(KIND_CONFIG_REAL_LOC) # Explicitly add 0.0.0.0 to SANs
 	@echo "networking:" >> $(KIND_CONFIG_REAL_LOC)
+	@echo "  ipFamily: ipv4" >> $(KIND_CONFIG_REAL_LOC)
 	@echo "  apiServerPort: 6443" >> $(KIND_CONFIG_REAL_LOC)
 	@echo "  podSubnet: \"10.244.0.0/16\"" >> $(KIND_CONFIG_REAL_LOC)
 	@echo "  serviceSubnet: \"10.96.0.0/12\"" >> $(KIND_CONFIG_REAL_LOC)

@@ -7,6 +7,7 @@ setup() {
   run_make update-kpt-lb-setters KIND_NET_PREFIX=172.30.0
 }
 
+# bats test_tags=req:LB-03
 @test "show-kind-lb-setters prints detected prefix and apply-setters values" {
   run_make show-kind-lb-setters KIND_NET_PREFIX=172.30.0
   [ "$status" -eq 0 ]
@@ -16,6 +17,7 @@ setup() {
   [[ "$output" == *"gitea-ssh-lb-ip: 172.30.0.102"* ]]
 }
 
+# bats test_tags=req:LB-02
 @test "show-kind-lb-setters fails when KinD prefix is empty" {
   run_make show-kind-lb-setters KIND_NET_PREFIX=""
   [ "$status" -ne 0 ]
