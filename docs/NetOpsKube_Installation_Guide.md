@@ -181,19 +181,19 @@ NO_PROXY    ?= 127.0.0.1,localhost,::1,.svc,.cluster.local,10.0.0.0/8,172.16.0.0
 Use port-forward (`:8080`) on the deploy host. A single hostname is enough for portal and Gitea:
 
 ```bash
-127.0.0.1 bng.nok.local
+127.0.0.1 portal.nok.local
 ```
 
 For direct MetalLB ingress access (without port-forward), use the detected KinD prefix (e.g. `172.19.0.100`):
 
 ```bash
-<kinD-prefix>.100 bng.nok.local
+<kinD-prefix>.100 portal.nok.local
 ```
 Example:
 ```bash
 ubuntu@nokia:~/kube_project/NetOpsKube$ cat /etc/hosts
 127.0.0.1 localhost
-127.0.0.1 bng.nok.local
+127.0.0.1 portal.nok.local
 ..........
 
 ubuntu@nokia:~/kube_project/NetOpsKube$
@@ -373,14 +373,14 @@ sudo docker exec -it clab-sros-bngt-bngblaster bash -c 'bngblaster -C pppoe.json
  ```
 
 ## Open portal
-Add `bng.nok.local` to the `/etc/hosts` file of your local machine (e.g., your Windows laptop), mapping it to the IP address of the Ubuntu host. This allows your browser to resolve the URLs correctly.
+Add `portal.nok.local` to the `/etc/hosts` file of your local machine (e.g., your Windows laptop), mapping it to the IP address of the Ubuntu host. This allows your browser to resolve the URLs correctly.
 
 ```bash
-127.0.0.1 bng.nok.local
+127.0.0.1 portal.nok.local
 ```
 
 ### NOK Portal
-http://bng.nok.local:8080/login
+http://portal.nok.local:8080/login
 
 Login Credentials:
 
@@ -393,7 +393,7 @@ Password: admin123
 
 Gitea is served under the same portal host.
 
-- Direct URL: http://bng.nok.local:8080/gitea/
+- Direct URL: http://portal.nok.local:8080/gitea/
 - Or from the portal menu: **Gitea** → `/gitea/nok/nok-bng-resources`
 
 Login credentials:

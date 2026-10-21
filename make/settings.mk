@@ -54,7 +54,7 @@ export HTTPS_PROXY ?=
 # NO_PROXY_SUFFIXES := .nok.local,.svc,.svc.cluster.local
 # NO_PROXY_SHORT    := gitea.nok.local,bbm-grafana-svc,bbm-grafana-svc.nok-bbm,bbm-grafana-svc.nok-bbm.svc,bbm-grafana-svc.nok-bbm.svc.cluster.local,bbm-prometheus-svc,bbm-prometheus-svc.nok-bbm,bbm-prometheus-svc.nok-bbm.svc,bbm-prometheus-svc.nok-bbm.svc.cluster.local
 # NO_PROXY := $(NO_PROXY_LOOPBACK),$(NO_PROXY_RFC1918),$(NO_PROXY_SUFFIXES),$(NO_PROXY_SHORT)
-export NO_PROXY := 127.0.0.1,localhost,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,10.96.0.0/12,10.244.0.0/16,gitea.nok.local,.nok.local,.svc,.svc.cluster.local,bbm-grafana-svc,bbm-grafana-svc.nok-bbm,bbm-grafana-svc.nok-bbm.svc,bbm-grafana-svc.nok-bbm.svc.cluster.local,bbm-prometheus-svc,bbm-prometheus-svc.nok-bbm,bbm-prometheus-svc.nok-bbm.svc,bbm-prometheus-svc.nok-bbm.svc.cluster.local,bng.nok.local
+export NO_PROXY := 127.0.0.1,localhost,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,10.96.0.0/12,10.244.0.0/16,gitea.nok.local,.nok.local,.svc,.svc.cluster.local,bbm-grafana-svc,bbm-grafana-svc.nok-bbm,bbm-grafana-svc.nok-bbm.svc,bbm-grafana-svc.nok-bbm.svc.cluster.local,bbm-prometheus-svc,bbm-prometheus-svc.nok-bbm,bbm-prometheus-svc.nok-bbm.svc,bbm-prometheus-svc.nok-bbm.svc.cluster.local,portal.nok.local
 
 
 KIND_CLUSTER_NAME ?= nok-demo
@@ -116,7 +116,7 @@ CLABS_REPO_URL ?= https://github.com/CSPDevLabs/nok-clabs
 # Internal helper for output indentation
 INDENT_OUT ?= sed 's/^/    /'
 ### Curl options:
-CURL := curl --silent --fail --show-error --noproxy "bng.nok.local"
+CURL := curl --silent --fail --show-error --noproxy "portal.nok.local"
 
 ## Tools versions
 ### ---------------------------------------------------------------------------|
@@ -155,7 +155,7 @@ DOWNLOAD_TOOLS_LIST := $(KIND) $(KUBECTL) $(HELM) $(KPT) $(K9S) $(YQ) $(GH) $(CL
 
 # --- Flux & Gitea GitOps Configuration ---
 GITOPS_NAMESPACE ?= nok-git
-GITEA_HOST ?= bng.nok.local
+GITEA_HOST ?= portal.nok.local
 GITEA_HTTP_PATH ?= /gitea
 GITEA_IP = $(KIND_NET_PREFIX).$(KIND_LB_INGRESS_HOST)
 GITEA_SSH_HOST = $(KIND_NET_PREFIX).$(KIND_LB_GITEA_SSH_HOST)
