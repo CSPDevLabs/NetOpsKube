@@ -171,6 +171,10 @@ ensure_kind_cgnat_forward() {
 }
 
 ensure_esa_stub() {
+  if docker inspect clab-sros-cgnat-cgnat1-iom clab-sros-cgnat-cgnat2-iom >/dev/null 2>&1; then
+    log "ISA IOM components present; ESA stub not required"
+    return 0
+  fi
   if ! docker inspect clab-sros-cgnat-esa-stub >/dev/null 2>&1; then
     log "WARNING: clab-sros-cgnat-esa-stub missing — ESA stays provisioned/Unknown"
     log "re-run: make redeploy-clab-cgnat from netopskube (BNG lab untouched)"
@@ -198,6 +202,7 @@ sros_show() {
   local ip="$1"
   local cmd="$2"
   sros_ssh "$ip" -tt <<EOF 2>/dev/null | tr -d '\r' | sed 's/\x1b\[[0-9;?]*[ -\/]*[@-~]//g'
+environment more false
 ${cmd}
 exit
 EOF
@@ -229,6 +234,9 @@ bounce_grpc_all() {
 }
 
 kick_esa() {
+  if docker inspect clab-sros-cgnat-cgnat1-iom clab-sros-cgnat-cgnat2-iom >/dev/null 2>&1; then
+    return 0
+  fi
   local ip
   for ip in "${CGNAT_NAT[@]}"; do
     if ! sros_ssh "$ip" -tt <<'EOF' >/dev/null 2>&1
@@ -360,7 +368,7 @@ pause_gnmic_collectors() {
 gnmic_has_nat_metric() {
   timeout 10 "$KUBECTL" exec -n "$NS" gnmic-cgnat-metrics-0 -- \
     wget -qO- 'http://127.0.0.1:9912/metrics' 2>/dev/null \
-    | grep -q 'state_isa_nat_group_oper_state' || return 1
+    | grep 'state_isa_nat_group_oper_state' >/dev/null || return 1
 }
 
 wait_grpc_and_attach() {
@@ -402,47 +410,34 @@ resume_gnmic_staggered() {
 }
 
 wait_esa_active() {
-  local ip t state nat_oper max_wait=120
-  if ! docker exec clab-sros-cgnat-esa-stub ip link show eth1 >/dev/null 2>&1; then
-    max_wait=30
-    log "esa-stub links missing — skip long ESA wait (run make redeploy-clab-cgnat)"
-  else
-    log "waiting up to ${max_wait}s for ESA VM / nat-group on cgnat1/cgnat2"
-  fi
+  local ip t nat_oper max_wait=120
+  log "waiting up to ${max_wait}s for NAT groups on cgnat1/cgnat2"
   for ip in "${CGNAT_NAT[@]}"; do
     t=0
-    state=""
     nat_oper=""
     while [ "$t" -lt "$max_wait" ]; do
-      state="$(sros_show "$ip" "show esa 1" | awk '/Operational State/ {print $NF; exit}')"
       nat_oper="$(sros_show "$ip" "show isa nat-group 1" | awk '/Operational state/ {print $NF; exit}')"
-      case "$state" in
-        up|active|inService|in-service|provisioned)
-          log "$ip ESA operational ($state), nat-group oper=${nat_oper:-unknown}"
-          break
-          ;;
-      esac
       case "$nat_oper" in
-        inService|in-service|transition|provisioned)
-          log "$ip nat-group oper=$nat_oper (ESA=${state:-unknown})"
+        inService|in-service)
+          log "$ip nat-group oper=$nat_oper"
           break
           ;;
       esac
       if [ "$((t % 60))" -eq 0 ] && [ "$t" -gt 0 ]; then
-        log "$ip still ESA=${state:-unknown} nat-group=${nat_oper:-unknown} (${t}s)"
+        log "$ip nat-group=${nat_oper:-unknown} (${t}s)"
       fi
       t=$((t + 10))
       sleep 10
     done
     if [ "$t" -ge "$max_wait" ]; then
-      log "$ip ESA=${state:-unknown} nat-group=${nat_oper:-unknown} after ${max_wait}s (SR-SIM sr-1s often stays provisioned; gNMI may still export transition)"
+      log "WARNING: $ip nat-group=${nat_oper:-unknown} after ${max_wait}s"
+      return 1
     fi
   done
 }
 
 recover_ne_grpc() {
-  # docker stop/start on NE containers breaks containerlab veth links to esa-stub
-  # (eth1-eth4 vanish). Use clab --reconfigure to restart NEs with cabling intact.
+  # Restart NEs through Containerlab so their IOM links remain configured.
   local clab_topo="${CLAB_TOPO:-}"
   if [ -z "$clab_topo" ]; then
     local base
@@ -459,7 +454,7 @@ recover_ne_grpc() {
   if [ ! -x "$clab_bin" ]; then
     clab_bin="$(command -v clab || command -v containerlab || true)"
   fi
-  log "gRPC still closed — clab deploy --reconfigure (preserves esa-stub links)"
+  log "gRPC still closed — clab deploy --reconfigure (preserves IOM links)"
   if [ -n "$clab_bin" ] && [ -x "$clab_bin" ]; then
     (cd "$(dirname "$clab_topo")" && "$clab_bin" deploy --reconfigure -t "$(basename "$clab_topo")") \
       || log "WARNING: clab reconfigure failed"
@@ -495,6 +490,9 @@ verify_prometheus() {
 
 rerun_hosts() {
   local c
+  for c in clab-sros-cgnat-inet clab-sros-cgnat-lan1 clab-sros-cgnat-lan2 clab-sros-cgnat-lan3; do
+    docker exec "$c" pkill -x iperf3 >/dev/null 2>&1 || true
+  done
   for c in clab-sros-cgnat-inet clab-sros-cgnat-cpe1 clab-sros-cgnat-cpe2 clab-sros-cgnat-cpe3 \
            clab-sros-cgnat-lan1 clab-sros-cgnat-lan2 clab-sros-cgnat-lan3; do
     if docker inspect "$c" >/dev/null 2>&1; then
