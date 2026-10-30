@@ -50,7 +50,7 @@ setup_nok_kpt_fixture() {
 make_var() {
   local var_name="$1"
   shift
-  make -C "$NETOPSKUBE_ROOT" --eval "all:;@echo \$(${var_name})" "$@" -s
+  make --no-print-directory -C "$NETOPSKUBE_ROOT" --eval "all:;@echo \$(${var_name})" "$@" -s
 }
 
 # Run a Makefile target against the fixture nok-kpt checkout.

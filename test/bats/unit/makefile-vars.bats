@@ -24,7 +24,7 @@ load '../../helpers/common.bash'
 
 # bats test_tags=req:CFG-01
 @test "Gitea and GitOps Makefile defaults are set" {
-  [ "$(make_var GITEA_HOST)" = "bng.nok.local" ]
+  [ "$(make_var GITEA_HOST)" = "portal.nok.local" ]
   [ "$(make_var GITEA_HTTP_PATH)" = "/gitea" ]
   [ "$(make_var KPT_REPO_BRANCH)" = "main" ]
   [ "$(make_var KIND_LB_DEFAULT_PREFIX)" = "172.18.0" ]

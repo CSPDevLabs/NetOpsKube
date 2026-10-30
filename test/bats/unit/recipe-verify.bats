@@ -15,14 +15,14 @@ load '../../helpers/common.bash'
 
 # bats test_tags=req:RCP-01
 @test "verify-recipe fails for unknown recipe name" {
-  run make -C "$NETOPSKUBE_ROOT" verify-recipe RECIPE=unknown 2>&1
+  run make -C "$NETOPSKUBE_ROOT" verify-recipe NOK_RECIPE=unknown 2>&1
   [ "$status" -ne 0 ]
-  [[ "$output" == *"RECIPE must be bng or dia"* ]]
+  [[ "$output" == *"NOK_RECIPE must be bng or dia"* ]]
 }
 
 # bats test_tags=req:RCP-01
-@test "unrelated Make targets work with an unknown recipe name" {
-  run make -C "$NETOPSKUBE_ROOT" help RECIPE=unknown
+@test "unrelated Make targets ignore the legacy RECIPE variable" {
+  run env RECIPE=banana make -C "$NETOPSKUBE_ROOT" help
   [ "$status" -eq 0 ]
   [[ "$output" == *"Display this help message"* ]]
 }

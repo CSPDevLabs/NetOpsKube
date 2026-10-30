@@ -7,22 +7,22 @@
 # Usage:
 #   make verify-recipe-bng
 #   make verify-recipe-dia
-#   make verify-recipe RECIPE=bng NOK_RECIPE_VERIFY_LEVEL=full
+#   make verify-recipe NOK_RECIPE=bng NOK_RECIPE_VERIFY_LEVEL=full
 #
 # Optional pre-publish check (not wired to push-*-manifests — run explicitly when desired):
 #   NOK_VERIFY_BEFORE_PUBLISH=yes make verify-before-publish-bng
 # See docs/TESTING.md
 # ----------------------------------------------------------------------------
 
-RECIPE ?= bng
+NOK_RECIPE ?= bng
 NOK_VERIFY_BEFORE_PUBLISH ?= no
 NOK_RECIPE_VERIFY_LEVEL ?= install
 PORTAL_HOST ?= bng.nok.local
 INGRESS_LOCAL_PORT ?= 8080
 RECIPE_POD_WAIT_TIMEOUT ?= 5m
 
-RECIPE_NS = $(if $(filter bng,$(RECIPE)),nok-bng,$(if $(filter dia,$(RECIPE)),nok-dia,))
-RECIPE_LABEL = $(if $(filter bng,$(RECIPE)),BNG,$(if $(filter dia,$(RECIPE)),DIA,))
+RECIPE_NS = $(if $(filter bng,$(NOK_RECIPE)),nok-bng,$(if $(filter dia,$(NOK_RECIPE)),nok-dia,))
+RECIPE_LABEL = $(if $(filter bng,$(NOK_RECIPE)),BNG,$(if $(filter dia,$(NOK_RECIPE)),DIA,))
 
 .PHONY: help-recipe-verify
 help-recipe-verify: ## List per-recipe verification targets
@@ -31,36 +31,36 @@ help-recipe-verify: ## List per-recipe verification targets
 
 .PHONY: verify-recipe-bng verify-recipe-dia verify-recipe verify-recipe-name-check
 verify-recipe-bng: ## Run install-level checks for the BNG recipe (set NOK_RECIPE_VERIFY_LEVEL=full for metrics)
-	@$(MAKE) verify-recipe RECIPE=bng
+	@$(MAKE) verify-recipe NOK_RECIPE=bng
 
 verify-recipe-dia: ## Run install-level checks for the DIA recipe (set NOK_RECIPE_VERIFY_LEVEL=full for metrics)
-	@$(MAKE) verify-recipe RECIPE=dia
+	@$(MAKE) verify-recipe NOK_RECIPE=dia
 
 verify-recipe-name-check:
-	@case "$(RECIPE)" in \
+	@case "$(NOK_RECIPE)" in \
 		bng|dia) ;; \
-		*) echo "Error: RECIPE must be bng or dia (got '$(RECIPE)')" >&2; exit 1 ;; \
+		*) echo "Error: NOK_RECIPE must be bng or dia (got '$(NOK_RECIPE)')" >&2; exit 1 ;; \
 	esac
 
-verify-recipe: verify-recipe-name-check check-tools ## Verify recipe health (RECIPE=bng|dia, NOK_RECIPE_VERIFY_LEVEL=install|full)
-	@test -n "$(RECIPE_NS)" || { echo "Error: RECIPE must be bng or dia (got '$(RECIPE)')" >&2; exit 1; }
+verify-recipe: verify-recipe-name-check check-tools ## Verify recipe health (NOK_RECIPE=bng|dia, NOK_RECIPE_VERIFY_LEVEL=install|full)
+	@test -n "$(RECIPE_NS)" || { echo "Error: NOK_RECIPE must be bng or dia (got '$(NOK_RECIPE)')" >&2; exit 1; }
 	@echo "--> RECIPE [$(RECIPE_LABEL)]: Starting $(NOK_RECIPE_VERIFY_LEVEL)-level verification in namespace '$(RECIPE_NS)'"
 	@$(MAKE) verify-recipe-controller
-	@$(MAKE) verify-recipe-pods RECIPE=$(RECIPE)
-	@$(MAKE) verify-recipe-portal-health RECIPE=$(RECIPE)
-	@$(MAKE) verify-recipe-prometheus-ready RECIPE=$(RECIPE)
+	@$(MAKE) verify-recipe-pods NOK_RECIPE=$(NOK_RECIPE)
+	@$(MAKE) verify-recipe-portal-health NOK_RECIPE=$(NOK_RECIPE)
+	@$(MAKE) verify-recipe-prometheus-ready NOK_RECIPE=$(NOK_RECIPE)
 	@if [ "$(NOK_RECIPE_VERIFY_LEVEL)" = "full" ]; then \
-		$(MAKE) verify-recipe-gnmic-subscriptions RECIPE=$(RECIPE); \
-		$(MAKE) verify-recipe-metrics RECIPE=$(RECIPE); \
+		$(MAKE) verify-recipe-gnmic-subscriptions NOK_RECIPE=$(NOK_RECIPE); \
+		$(MAKE) verify-recipe-metrics NOK_RECIPE=$(NOK_RECIPE); \
 	fi
 	@echo ""
 	@echo "--> RECIPE [$(RECIPE_LABEL)]: All $(NOK_RECIPE_VERIFY_LEVEL)-level checks passed."
 
 .PHONY: verify-recipe-pods
-verify-recipe-pods: $(KUBECTL) ## Wait for recipe namespace pods to be Running/Completed
+verify-recipe-pods: verify-recipe-name-check $(KUBECTL) ## Wait for recipe namespace pods to be Running/Completed
 	@echo "--> RECIPE [$(RECIPE_LABEL)]: Checking pod availability in '$(RECIPE_NS)'"
 	@if ! $(KUBECTL) get namespace $(RECIPE_NS) >/dev/null 2>&1; then \
-		echo "[FAIL] Namespace '$(RECIPE_NS)' does not exist. Run install-$(RECIPE)-pkg first." >&2; \
+		 echo "[FAIL] Namespace '$(RECIPE_NS)' does not exist. Run install-$(NOK_RECIPE)-pkg first." >&2; \
 		exit 1; \
 	fi
 	@DEPLOYS=$$($(KUBECTL) get deploy -n $(RECIPE_NS) -o name 2>/dev/null); \
@@ -79,7 +79,7 @@ verify-recipe-pods: $(KUBECTL) ## Wait for recipe namespace pods to be Running/C
 	echo "[PASS] $$COUNT pod(s) Running/Completed in $(RECIPE_NS)"
 
 .PHONY: verify-recipe-portal-health
-verify-recipe-portal-health: $(KUBECTL) ## HTTP GET /healthz on the recipe portal ingress
+verify-recipe-portal-health: verify-recipe-name-check $(KUBECTL) ## HTTP GET /healthz on the recipe portal ingress
 	@echo "--> RECIPE [$(RECIPE_LABEL)]: Checking portal /healthz"
 	@LB_IP=$$($(KUBECTL) get svc -n nok-base ingress-nginx-controller \
 		-o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null); \
@@ -102,7 +102,7 @@ verify-recipe-portal-health: $(KUBECTL) ## HTTP GET /healthz on the recipe porta
 	fi
 
 .PHONY: verify-recipe-prometheus-ready
-verify-recipe-prometheus-ready: $(KUBECTL) ## Confirm Prometheus pod is ready in the recipe namespace
+verify-recipe-prometheus-ready: verify-recipe-name-check $(KUBECTL) ## Confirm Prometheus pod is ready in the recipe namespace
 	@echo "--> RECIPE [$(RECIPE_LABEL)]: Checking Prometheus readiness"
 	@PROM_POD=$$($(KUBECTL) get pods -n $(RECIPE_NS) \
 		-l app.kubernetes.io/name=prometheus -o jsonpath='{.items[0].metadata.name}' 2>/dev/null); \
@@ -138,12 +138,12 @@ verify-recipe-controller: $(KUBECTL) ## Confirm nok-controller is ready and /tar
 	fi
 
 .PHONY: verify-recipe-gnmic-subscriptions
-verify-recipe-gnmic-subscriptions: $(KUBECTL) ## Verify gNMIc Target subscriptions are running (full level)
+verify-recipe-gnmic-subscriptions: verify-recipe-name-check $(KUBECTL) ## Verify gNMIc Target subscriptions are running (full level)
 	@echo "--> RECIPE [$(RECIPE_LABEL)]: Checking gNMIc subscriptions"
 	@$(MAKE) verify-gnmic-subscriptions BNG_NAMESPACE=$(RECIPE_NS)
 
 .PHONY: verify-recipe-metrics
-verify-recipe-metrics: $(KUBECTL) ## Verify Prometheus is scraping gNMIc metrics (full level)
+verify-recipe-metrics: verify-recipe-name-check $(KUBECTL) ## Verify Prometheus is scraping gNMIc metrics (full level)
 	@echo "--> RECIPE [$(RECIPE_LABEL)]: Checking gNMIc metrics in Prometheus"
 	@PROM_POD=$$($(KUBECTL) get pods -n $(RECIPE_NS) \
 		-l app.kubernetes.io/name=prometheus -o jsonpath='{.items[0].metadata.name}' 2>/dev/null); \
@@ -176,14 +176,14 @@ verify-recipe-metrics: $(KUBECTL) ## Verify Prometheus is scraping gNMIc metrics
 .PHONY: verify-before-publish-bng verify-before-publish-dia
 verify-before-publish-bng:
 	@if [ "$(NOK_VERIFY_BEFORE_PUBLISH)" = "yes" ]; then \
-		$(MAKE) verify-recipe RECIPE=bng NOK_RECIPE_VERIFY_LEVEL=install; \
+		$(MAKE) verify-recipe NOK_RECIPE=bng NOK_RECIPE_VERIFY_LEVEL=install; \
 	else \
 		echo "--> RECIPE [BNG]: Pre-publish verification skipped (set NOK_VERIFY_BEFORE_PUBLISH=yes to enable)"; \
 	fi
 
 verify-before-publish-dia:
 	@if [ "$(NOK_VERIFY_BEFORE_PUBLISH)" = "yes" ]; then \
-		$(MAKE) verify-recipe RECIPE=dia NOK_RECIPE_VERIFY_LEVEL=install; \
+		$(MAKE) verify-recipe NOK_RECIPE=dia NOK_RECIPE_VERIFY_LEVEL=install; \
 	else \
 		echo "--> RECIPE [DIA]: Pre-publish verification skipped (set NOK_VERIFY_BEFORE_PUBLISH=yes to enable)"; \
 	fi

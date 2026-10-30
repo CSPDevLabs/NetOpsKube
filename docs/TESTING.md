@@ -48,6 +48,9 @@ make verify-recipe-dia
 make test-recipes
 ```
 
+For direct verification, select a recipe with `NOK_RECIPE=bng` or
+`NOK_RECIPE=dia`; unrelated Make targets do not read this selector.
+
 The default `NOK_RECIPE_VERIFY_LEVEL=install` checks nok-controller readiness,
 recipe pods, Portal `/healthz`, and Prometheus readiness. Set
 `NOK_RECIPE_VERIFY_LEVEL=full` to add gNMIc subscription and Prometheus metric
