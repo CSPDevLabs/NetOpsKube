@@ -20,6 +20,46 @@ FLUX_BNG_SECRET ?= nok-bng-auth
 BNG_MANIFESTS_DIR := $(NOK_CLABS_DIR)/nok-bng/nok-manifests
 BNG_REPO_URL = ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_BNG_REPO).git
 
+# ------------------------------------------------------------------------------
+# IPFIX BNG Integration Paths
+# ------------------------------------------------------------------------------
+
+BNG_IPFIX_DIR ?= $(BASE)/nok-kpt/nok-ipfix/nok-bng
+BNG_IPFIX_GRAFANA_DATASOURCE_MANIFEST ?= $(BNG_IPFIX_DIR)/grafana/datasource/ipfix-postgres-ds.yaml
+BNG_IPFIX_GRAFANA_DASHBOARD_JSON ?= $(BNG_IPFIX_DIR)/grafana/manifests/ipfix-flow-analytics.json
+BNG_IPFIX_GRAFANA_DASHBOARD_MANIFEST ?= $(BNG_IPFIX_DIR)/grafana/manifests/ipfix-flow-analytics.yaml
+
+# ------------------------------------------------------------------------------
+# Grafana Configuration
+# ------------------------------------------------------------------------------
+
+BNG_IPFIX_GRAFANA_NAMESPACE ?= nok-bng
+
+# Reuse the existing shared Grafana dashboard repository.
+BNG_IPFIX_GRAFANA_REPO ?= grafana-dashboards
+BNG_IPFIX_GRAFANA_REPO_PREFIX ?= bng
+BNG_IPFIX_GRAFANA_STAGING ?= $(BASE)/build/ipfix-grafana-staging
+BNG_IPFIX_GRAFANA_PUSH_SCRIPT ?= $(BASE)/scripts/push-ipfix-grafana-dashboard.sh
+
+# ------------------------------------------------------------------------------
+# SDCIO Configuration
+# ------------------------------------------------------------------------------
+
+BNG_IPFIX_SDCIO_CONFIG_FILES ?= \
+	sdcio-config-bng1-ipfix.yaml \
+	sdcio-config-bng2-ipfix.yaml
+BNG_IPFIX_SDCIO_PUSH_SCRIPT ?= $(BASE)/scripts/push-ipfix-sdcio-config.sh
+BNG_IPFIX_SDCIO_REPO ?= nok-bng-resources
+BNG_IPFIX_SDCIO_REPO_OWNER ?= nok
+
+# ------------------------------------------------------------------------------
+# Grafana Datasource Repository
+# ------------------------------------------------------------------------------
+
+BNG_IPFIX_DATASOURCE_REPO ?= nok-bng-resources
+BNG_IPFIX_DATASOURCE_REPO_OWNER ?= nok
+BNG_IPFIX_DATASOURCE_REPO_PATH ?= grafana/datasources/ipfix-postgres-ds.yaml
+
 .PHONY: try-nok-bng
 try-nok-bng: install-bng-pkg gitops-bng-kustomization portal-enable-bng annotate-auth-ingress-bng ## Deploy the BNG solution
 
@@ -152,3 +192,186 @@ portal-enable-bng: ## Enable the BNG solution in the NetOpsKube Portal
 	jq '.data["menu-config.json"] |= (fromjson | .featured |= map(if .name == "BBM" then .openInNewTab = false else . end) | .solutions |= map(if .id == "nok-bng" then .deployed = "yes" | .services |= map(if .name == "Grafana" then .openInNewTab = false else . end) else . end) | tojson)' | \
 	$(KUBECTL) apply -f -
 	@$(KUBECTL) rollout restart deployment/nok-apps-portal-app -n nok-base
+
+
+
+
+# ------------------------------------------------------------------------------
+# IPFIX Integration
+# ------------------------------------------------------------------------------
+# IPFIX Grafana Dashboard Push
+# ------------------------------------------------------------------------------
+
+.PHONY: push-ipfix-grafana-dashboard
+push-ipfix-grafana-dashboard: ## Push IPFIX dashboard to the shared BNG dashboard directory
+	@if ! echo "$(IPFIX_ENABLED)" | grep -Eiq '^(yes|true|1)$$'; then \
+		echo "--> IPFIX: Disabled; skipping Grafana dashboard push"; \
+		exit 0; \
+	fi
+	@if [ ! -f "$(BNG_IPFIX_GRAFANA_DASHBOARD_JSON)" ]; then \
+		echo "[ERROR] IPFIX dashboard not found: $(BNG_IPFIX_GRAFANA_DASHBOARD_JSON)" >&2; \
+		exit 1; \
+	fi
+	@GRAFANA_DASHBOARDS_STAGING="$(BNG_IPFIX_GRAFANA_STAGING)" \
+		FLUX_GRAFANA_REPO="$(BNG_IPFIX_GRAFANA_REPO)" \
+		FLUX_GIT_BRANCH="$(FLUX_GIT_BRANCH)" \
+		GITEA_SSH_HOST="$(GITEA_SSH_HOST)" \
+		GITEA_ADMIN_USER="$(GITEA_ADMIN_USER)" \
+		FLUX_SSH_KEY="$(FLUX_SSH_KEY)" \
+		BNG_IPFIX_GRAFANA_DASHBOARD="$(notdir $(BNG_IPFIX_GRAFANA_DASHBOARD_JSON))" \
+		BNG_IPFIX_GRAFANA_SOURCE_DIR="$(dir $(BNG_IPFIX_GRAFANA_DASHBOARD_JSON))" \
+		BNG_IPFIX_GRAFANA_REPO_PREFIX="$(BNG_IPFIX_GRAFANA_REPO_PREFIX)" \
+		bash "$(BNG_IPFIX_GRAFANA_PUSH_SCRIPT)"
+
+# ------------------------------------------------------------------------------
+# IPFIX Grafana Dashboard
+# ------------------------------------------------------------------------------
+
+.PHONY: apply-ipfix-grafana-dashboard
+apply-ipfix-grafana-dashboard: ## Apply the IPFIX GrafanaDashboard resource
+	@if ! echo "$(IPFIX_ENABLED)" | grep -Eiq '^(yes|true|1)$$'; then \
+		echo "--> IPFIX: Disabled; skipping GrafanaDashboard apply"; \
+		exit 0; \
+	fi
+
+	@if [ ! -f "$(BNG_IPFIX_GRAFANA_DASHBOARD_MANIFEST)" ]; then \
+		echo "[ERROR] IPFIX GrafanaDashboard manifest not found: $(BNG_IPFIX_GRAFANA_DASHBOARD_MANIFEST)" >&2; \
+		exit 1; \
+	fi
+
+	@if [ ! -f "$(BNG_IPFIX_GRAFANA_DASHBOARD_JSON)" ]; then \
+		echo "[ERROR] IPFIX dashboard JSON not found: $(BNG_IPFIX_GRAFANA_DASHBOARD_JSON)" >&2; \
+		exit 1; \
+	fi
+
+	@echo "--> IPFIX: Applying Grafana dashboard ConfigMap"
+
+	@$(KUBECTL) create configmap ipfix-dashboard-json \
+		--from-file=$(BNG_IPFIX_GRAFANA_DASHBOARD_JSON) \
+		-n $(BNG_IPFIX_GRAFANA_NAMESPACE) \
+		--dry-run=client -o yaml | $(KUBECTL) apply -f -
+
+	@echo "--> IPFIX: Applying GrafanaDashboard manifest"
+	@$(KUBECTL) apply -f "$(BNG_IPFIX_GRAFANA_DASHBOARD_MANIFEST)"
+
+	@echo "--> IPFIX: Grafana dashboard resources applied successfully"
+
+
+# ------------------------------------------------------------------------------
+# SDCIO IPFIX Config Push
+# ------------------------------------------------------------------------------
+
+.PHONY: push-ipfix-sdcio-config
+push-ipfix-sdcio-config: ## Push SDCIO IPFIX config manifest(s) to Gitea
+	@if ! echo "$(IPFIX_ENABLED)" | grep -Eiq '^(yes|true|1)$$'; then \
+		echo "--> IPFIX: Disabled; skipping SDCIO config push"; \
+		exit 0; \
+	fi
+	@if [ -z "$(strip $(BNG_IPFIX_SDCIO_CONFIG_FILES))" ]; then \
+		echo "[ERROR] No SDCIO config files specified." >&2; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(BNG_IPFIX_SDCIO_PUSH_SCRIPT)" ]; then \
+		echo "[ERROR] Push script not found: $(BNG_IPFIX_SDCIO_PUSH_SCRIPT)" >&2; \
+		exit 1; \
+	fi
+	@for file in $(BNG_IPFIX_SDCIO_CONFIG_FILES); do \
+		if [ ! -f "$(BNG_IPFIX_DIR)/sdcio/$$file" ]; then \
+			echo "[ERROR] SDCIO config not found: $(BNG_IPFIX_DIR)/sdcio/$$file" >&2; \
+			exit 1; \
+		fi; \
+	done
+	@GITEA_SSH_HOST="$(GITEA_SSH_HOST)" \
+		FLUX_SSH_KEY="$(FLUX_SSH_KEY)" \
+		FLUX_GIT_BRANCH="$(FLUX_GIT_BRANCH)" \
+		GITEA_REPO_OWNER="$(BNG_IPFIX_SDCIO_REPO_OWNER)" \
+		GITEA_REPO_NAME="$(BNG_IPFIX_SDCIO_REPO)" \
+		BNG_IPFIX_SDCIO_SOURCE_DIR="$(BNG_IPFIX_DIR)/sdcio" \
+		BNG_IPFIX_SDCIO_CONFIG_FILES="$(BNG_IPFIX_SDCIO_CONFIG_FILES)" \
+		bash "$(BNG_IPFIX_SDCIO_PUSH_SCRIPT)"
+
+
+# ------------------------------------------------------------------------------
+# IPFIX Grafana Datasource Push
+# ------------------------------------------------------------------------------
+
+.PHONY: push-ipfix-grafana-datasource
+push-ipfix-grafana-datasource: ## Push IPFIX Grafana datasource to Gitea
+	@if ! echo "$(IPFIX_ENABLED)" | grep -Eiq '^(yes|true|1)$$'; then \
+		echo "--> IPFIX: Disabled; skipping Grafana datasource push"; \
+		exit 0; \
+	fi
+	@if [ ! -f "$(BNG_IPFIX_GRAFANA_DATASOURCE_MANIFEST)" ]; then \
+		echo "[ERROR] Datasource manifest not found: $(BNG_IPFIX_GRAFANA_DATASOURCE_MANIFEST)" >&2; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(FLUX_SSH_KEY)" ]; then \
+		echo "[ERROR] SSH key not found: $(FLUX_SSH_KEY)" >&2; \
+		exit 1; \
+	fi
+	@set -eu; \
+	STAGING_DIR=$$(mktemp -d "$${TMPDIR:-/tmp}/ipfix-datasource.XXXXXX"); \
+	trap 'rm -rf "$$STAGING_DIR"' EXIT; \
+	printf -v SSH_KEY_QUOTED '%q' "$(FLUX_SSH_KEY)"; \
+	export GIT_SSH_COMMAND="ssh -i $$SSH_KEY_QUOTED -o IdentitiesOnly=yes"; \
+	REPO_URL="ssh://git@$(GITEA_SSH_HOST)/$(BNG_IPFIX_DATASOURCE_REPO_OWNER)/$(BNG_IPFIX_DATASOURCE_REPO).git"; \
+	echo "--> Grafana: Cloning $(BNG_IPFIX_DATASOURCE_REPO_OWNER)/$(BNG_IPFIX_DATASOURCE_REPO)"; \
+	git clone --branch "$(FLUX_GIT_BRANCH)" --single-branch "$$REPO_URL" "$$STAGING_DIR/repo"; \
+	cd "$$STAGING_DIR/repo"; \
+	DEST="$(BNG_IPFIX_DATASOURCE_REPO_PATH)"; \
+	mkdir -p "$$(dirname "$$DEST")"; \
+	install -m 0644 "$(BNG_IPFIX_GRAFANA_DATASOURCE_MANIFEST)" "$$DEST"; \
+	git add -- "$$DEST"; \
+	if git diff --cached --quiet; then \
+		echo "--> Grafana: No datasource changes to push"; \
+		exit 0; \
+	fi; \
+	git diff --cached --check; \
+	git diff --cached --stat; \
+	if ! git var GIT_AUTHOR_IDENT >/dev/null 2>&1; then \
+		echo "[ERROR] Configure git user.name and user.email before pushing" >&2; \
+		exit 1; \
+	fi; \
+	git commit -m "Add IPFIX PostgreSQL Grafana datasource"; \
+	git push origin "HEAD:$(FLUX_GIT_BRANCH)"; \
+	echo "--> Grafana: Datasource pushed to $(BNG_IPFIX_DATASOURCE_REPO_OWNER)/$(BNG_IPFIX_DATASOURCE_REPO)/$$DEST"
+
+
+# ------------------------------------------------------------------------------
+# Deploy IPFIX Pipeline
+# ------------------------------------------------------------------------------
+
+.PHONY: configure-ipfix-bng
+configure-ipfix-bng: ## Configure and publish all BNG-specific IPFIX integrations
+	@set -e; \
+	if ! echo "$(IPFIX_ENABLED)" | grep -Eiq '^(yes|true|1)$$'; then \
+		echo ""; \
+		echo "============================================================"; \
+		echo " IPFIX is disabled. Skipping complete BNG pipeline."; \
+		echo " Set IPFIX_ENABLED=YES to enable it."; \
+		echo "============================================================"; \
+		exit 0; \
+	fi; \
+	echo ""; \
+	echo "============================================================"; \
+	echo " Deploying complete BNG IPFIX pipeline"; \
+	echo "============================================================"; \
+	echo ""; \
+	echo " [1/5] Publishing SDCIO configuration"; \
+	$(MAKE) --no-print-directory push-ipfix-sdcio-config; \
+	echo ""; \
+	echo " [2/5] Publishing Grafana PostgreSQL datasource"; \
+	$(MAKE) --no-print-directory push-ipfix-grafana-datasource; \
+	echo ""; \
+	echo " [3/5] Publishing IPFIX Grafana dashboard"; \
+	$(MAKE) --no-print-directory push-ipfix-grafana-dashboard; \
+	echo ""; \
+	echo " [4/5] Applying GrafanaDashboard resource"; \
+	$(MAKE) --no-print-directory apply-ipfix-grafana-dashboard; \
+	echo ""; \
+	echo " [5/5] Checking IPFIX deployment status"; \
+	$(MAKE) --no-print-directory status-ipfix; \
+	echo ""; \
+	echo "============================================================"; \
+	echo " BNG IPFIX pipeline workflow completed successfully"; \
+	echo "============================================================"
