@@ -256,12 +256,11 @@ deploy-ipfix: generate-ipfix-manifests check-ipfix-prerequisites ## Deploy the c
 		-n $(IPFIX_NAMESPACE) \
 		--timeout=$(IPFIX_DEPLOYMENT_TIMEOUT); \
 	echo ""; \
+	$(MAKE) status-ipfix; \
+	echo ""; \
 	echo "============================================================"; \
 	echo " IPFIX: Deployment completed successfully"; \
 	echo "============================================================"; \
-	echo ""; \
-	$(KUBECTL) get deployments,statefulsets,services,jobs \
-		-n $(IPFIX_NAMESPACE)
 
 
 
@@ -281,6 +280,3 @@ status-ipfix: ## Show IPFIX workloads, PVCs and recent events
 	@echo "--> IPFIX: Persistent volume claims"
 	@$(KUBECTL) get pvc -n $(IPFIX_NAMESPACE)
 	@echo ""
-	@echo "--> IPFIX: Recent events"
-	@$(KUBECTL) get events -n $(IPFIX_NAMESPACE) \
-		--sort-by=.metadata.creationTimestamp
