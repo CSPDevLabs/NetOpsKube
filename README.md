@@ -428,124 +428,97 @@ A default user is automatically created when the `netopskube` Keycloak realm is 
 
 <details>
 
-<summary><strong>Deploying and Integrating IPFIX with Network Stacks</strong></summary>
+<summary><strong>Deploy and Integrate IPFIX with Network Stacks</strong></summary>
 
-NetOpsKube provides Makefile-based automation for deploying the shared IPFIX infrastructure and integrating individual network stacks with the flow-monitoring pipeline.
+NetOpsKube provides Makefile-based automation to deploy a shared IPFIX flow-monitoring platform and integrate individual network stacks with it.
 
 The deployment is divided into two stages:
 
-1. **Base IPFIX Deployment:** Deploy the shared GoFlow2, Kafka, PostgreSQL and Python consumer infrastructure.
-2. **Network Stack Integration:** Configure the individual network stack to use the shared IPFIX infrastructure and publish its monitoring resources.
+1. **Base Infrastructure:** Deploy shared GoFlow2 collectors, Apache Kafka, PostgreSQL, and the Python consumer.
+2. **Network Stack Integration:** Configure network devices for IPFIX export and publish stack-specific monitoring resources.
 
-This approach allows multiple network stacks to share the same IPFIX backend without deploying separate Kafka, PostgreSQL or consumer instances for each stack.
+This approach allows multiple network clusters to share the same IPFIX backend without deploying separate Kafka, PostgreSQL, or consumer instances.
 
 ### Prerequisites
 
-### Before proceeding
-
 The current IPFIX playground supports the **BNG network stack only**.
 
-Before deploying IPFIX, ensure that:
+Ensure that the NetOpsKube base environment and BNG stack are deployed and operational.
 
-- The NetOpsKube base environment is deployed and its KinD cluster is operational.
-- The BNG network stack is deployed and configured.
+### Deployment Workflow
 
-For a fresh playground setup, run the following commands in order:
+For a fresh playground setup, execute the following steps from the NetOpsKube repository root.
+
+**1. Prepare the environment**
 
 ```bash
-# 1. Deploy the NetOpsKube base environment
 make try-nok
-
-# 2. Deploy the BNG network stack
 make try-nok-bng
-
-# 3. Deploy the shared IPFIX infrastructure
-make deploy-ipfix
-
-# 4. Configure IPFIX integration for BNG
-make configure-ipfix-bng
 ```
 
-The first two commands prepare the NetOpsKube environment and BNG stack. The last two deploy the shared IPFIX pipeline and integrate it with BNG.
+**2. Configure network clusters**
 
-**Note:** Other network stacks are not currently covered by this IPFIX playground deployment workflow. 
+Update `nok-ipfix/clusters.conf` with the cluster details:
 
-### Step 1: Enable IPFIX
+```text
+# cluster_id|load_balancer_ip|kafka_partitions
+bng-1|172.18.0.104|3
+```
 
-IPFIX integration is controlled through the `IPFIX_ENABLED` make variable.
+Note: Here, bng-1 is just an example. You may set different cluster ids.
 
-Enable it by setting:
+**3. Deploy the shared IPFIX infrastructure**
 
 ```bash
-IPFIX_ENABLED=YES
+make deploy-ipfix CLUSTER_ID=bng-1
 ```
 
-### Step 2: Deploy the Base IPFIX Infrastructure
+This deploys the GoFlow2 collector, Kafka, cluster-specific IPFIX topics, PostgreSQL, and Python consumer. The target also generates manifests, validates prerequisites, applies resources, and verifies workload rollouts.
 
-From the NetOpsKube repository root, execute:
-
-```bash
-make deploy-ipfix
-```
-
-This deploys the shared IPFIX infrastructure, including:
-
-- GoFlow2 collectors and Kubernetes Services.
-- Apache Kafka and IPFIX topics.
-- PostgreSQL and database schema.
-- Python IPFIX consumer.
-- Shared Dead Letter Queue.
-
-The deployment target automatically generates cluster-specific manifests, validates prerequisites, applies Kubernetes resources, waits for workload rollouts and displays the deployment status.
-
-This operation only needs to be performed once for the shared IPFIX infrastructure.
-
-### Step 3: Configure IPFIX Integration for BNG
-
-Once the base IPFIX infrastructure and BNG environment are deployed, execute:
+**4. Integrate BNG**
 
 ```bash
 make configure-ipfix-bng
 ```
 
-This target automates the integration of BNG devices with the shared IPFIX flow-monitoring platform.
+This publishes the BNG-specific SDCIO configuration, PostgreSQL datasource, and Grafana dashboard resources to their respective GitOps repositories and applies the required dashboard resources.
 
-It publishes the BNG-specific IPFIX configuration and Grafana monitoring resources to their respective GitOps repositories, allowing Flux and Grafana to consume and manage the configurations.
+### IPFIX Integration Architecture
 
-The workflow performs the following operations:
+The flow-monitoring pipeline operates as follows:
 
-| Step | Operation | Description |
-|---|---|---|
-| 1 | SDCIO Configuration | Publishes the BNG-specific IPFIX configuration files for BNG1 and BNG2 to the BNG GitOps repository. |
-| 2 | Grafana Datasource | Publishes the PostgreSQL datasource configuration to the BNG resources repository. |
-| 3 | Grafana Dashboard | Publishes the IPFIX Flow Analytics dashboard to the shared Grafana dashboard repository under the BNG directory. |
-| 4 | Dashboard Application | Creates or updates the dashboard ConfigMap and applies the GrafanaDashboard custom resource in the BNG namespace. |
-| 5 | Status Verification | Checks and displays the status of the shared IPFIX monitoring infrastructure. |
+| Component | Responsibility |
+|---|---|
+| SDCIO | Configures IPFIX export on BNG devices. |
+| GoFlow2 | Receives IPFIX exports and converts them into structured flow events. |
+| Apache Kafka | Streams and buffers events in cluster-specific topics. |
+| Python Consumer | Discovers IPFIX topics, processes events, and stores flow records. |
+| PostgreSQL | Stores processed flow data. |
+| Grafana | Visualizes flow analytics using the PostgreSQL datasource. |
 
-**Integration Architecture**
+The infrastructure is shared across network clusters, while device configurations and monitoring resources remain stack-specific.
 
-- **Configuration Management:** SDCIO manages the IPFIX configuration applied to the BNG devices.
-- **Flow Collection:** GoFlow2 receives IPFIX exports from the configured BNG devices and forwards flow events to Kafka.
-- **Flow Processing:** The shared Kafka consumer processes flow events and persists them in PostgreSQL.
-- **Visualization:** Grafana uses the PostgreSQL datasource to display flow analytics through the IPFIX dashboard.
+### Adding Additional Network Clusters
 
-The integration reuses the existing shared IPFIX infrastructure rather than deploying separate collectors, Kafka brokers, databases, or consumers for each BNG cluster.
+Additional clusters can be onboarded without deploying another Kafka broker, PostgreSQL instance, or Python consumer.
 
-### Adding More Network Stack Integrations
+1. Add the cluster details to `clusters.conf`.
+2. Assign a unique cluster ID and GoFlow2 LoadBalancer IP.
+3. Deploy the cluster-specific resources.
 
-The shared IPFIX infrastructure is independent of individual network stacks.
+For example:
 
-Additional integrations can follow the same model:
+```bash
+make deploy-ipfix CLUSTER_ID=cluster-2
+```
 
-1. Deploy the base IPFIX infrastructure.
-2. Configure the corresponding cluster and GoFlow2 collector.
-3. Integrate the network stack with its collector.
-4. Publish the stack-specific monitoring configuration and dashboards.
+The Python consumer automatically discovers Kafka topics following the `ipfix-` naming convention. No hardcoded cluster mappings or consumer code changes are required when adding new topics.
 
-The Python consumer automatically discovers Kafka topics following the `ipfix-` naming convention, so new network clusters do not require hardcoded consumer configuration changes.
+**Note:** The shared architecture supports multiple network clusters, but the current automated network-stack integration workflow is available for BNG only. Other network stacks will require their respective integration targets.
 
-For more information refer to https://github.com/CSPDevLabs/ipfix-consumer
+### Related Repository
 
+[IPFIX Consumer Repository](https://github.com/CSPDevLabs/ipfix-consumer)
 
 </details>
 
