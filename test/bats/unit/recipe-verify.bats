@@ -11,6 +11,7 @@ load '../../helpers/common.bash'
   [[ "$output" == *"verify-recipe-pods"* ]]
   [[ "$output" == *"verify-recipe-metrics"* ]]
   [[ "$output" == *"verify-recipe-controller"* ]]
+  [[ "$output" == *"verify-recipe-resources"* ]]
 }
 
 # bats test_tags=req:RCP-01
@@ -18,6 +19,27 @@ load '../../helpers/common.bash'
   run make -C "$NETOPSKUBE_ROOT" verify-recipe NOK_RECIPE=unknown 2>&1
   [ "$status" -ne 0 ]
   [[ "$output" == *"NOK_RECIPE must be bng or dia"* ]]
+}
+
+# bats test_tags=req:RCP-01
+@test "verify-recipe fails for invalid verification level" {
+  run make -C "$NETOPSKUBE_ROOT" verify-recipe-level-check NOK_RECIPE_VERIFY_LEVEL=invalid 2>&1
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"NOK_RECIPE_VERIFY_LEVEL must be install or full"* ]]
+}
+
+# bats test_tags=req:RCP-01
+@test "verify-recipe-bng rejects invalid verification level" {
+  run make -C "$NETOPSKUBE_ROOT" verify-recipe-bng NOK_RECIPE_VERIFY_LEVEL=invalid 2>&1
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"NOK_RECIPE_VERIFY_LEVEL must be install or full"* ]]
+}
+
+# bats test_tags=req:RCP-01
+@test "verify-recipe-dia rejects invalid verification level" {
+  run make -C "$NETOPSKUBE_ROOT" verify-recipe-dia NOK_RECIPE_VERIFY_LEVEL=invalid 2>&1
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"NOK_RECIPE_VERIFY_LEVEL must be install or full"* ]]
 }
 
 # bats test_tags=req:RCP-01

@@ -18,6 +18,6 @@ Each requirement is linked to one or more BATS unit tests with a
 - `LB-03`: `show-kind-lb-setters` prints the detected prefix and setter values.
 - `NET-01`: Gitea addresses derive from the KinD prefix and configured host octets.
 - `RCP-01`: Recipe verification rejects unknown recipes without blocking unrelated Make targets.
-- `RCP-02`: Recipe health checks fail when recipe pods are unhealthy.
+- `RCP-02`: Recipe health checks fail when recipe pods are not Ready or required install CRs are missing.
 - `TEST-01`: The kpt validator and requirement check fail when their required inputs are missing.
 - `TOOL-01`: `check-tools` provisions the pinned Bats version.

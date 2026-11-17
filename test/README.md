@@ -1,8 +1,11 @@
-# BATS test contribution guide
+# NetOpsKube BATS unit tests
 
-The operator testing commands are documented in [docs/TESTING.md](../docs/TESTING.md).
-This file describes where tests live, which NetOpsKube behavior they cover,
-and how to add or update unit tests.
+Operators: [docs/TESTING.md](../docs/TESTING.md). **Choosing test type and
+repository (kpt vs BATS vs integration):**
+[docs/TEST-CONTRIBUTION.md](../docs/TEST-CONTRIBUTION.md).
+
+This file maps BATS files to Makefile sources and describes how to add or
+update **unit** tests in this repository.
 
 ## Layout and source mapping
 
@@ -17,7 +20,8 @@ and how to add or update unit tests.
 | `unit/patch-gitea-kpt-manifest.bats` | Gitea manifest patching script |
 | `unit/platform.bats` | `os-shell` and `proxy-env` in `make/settings.mk` |
 | `unit/recipe-verify.bats` | Recipe verification configuration in `make/recipe-verify.mk` |
-| `unit/recipe-health.bats` | Recipe pod health check in `make/recipe-verify.mk` |
+| `unit/recipe-health.bats` | Recipe pod Ready check in `make/recipe-verify.mk` |
+| `unit/recipe-resources.bats` | Recipe install CR checks in `make/recipe-verify.mk` |
 | `unit/show-kind-lb-setters.bats` | `show-kind-lb-setters` in `Makefile` |
 | `unit/troubleshoot.bats` | Troubleshooting targets and gNMI subscription checks |
 | `unit/test-requirements.bats` | kpt validation and requirement-check input handling |

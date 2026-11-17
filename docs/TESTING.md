@@ -1,7 +1,9 @@
 # NetOpsKube testing
 
 This is the operator guide to the NetOpsKube, kpt recipe, and nok-controller
-test commands. For BATS authoring conventions, see [test/README.md](../test/README.md).
+test commands. Contributors choosing what to test and where to add it should
+read [TEST-CONTRIBUTION.md](TEST-CONTRIBUTION.md). For BATS file layout and unit-test
+conventions, see [test/README.md](../test/README.md).
 
 ## Unit tests and package validation
 
@@ -51,8 +53,14 @@ make test-recipes
 For direct verification, select a recipe with `NOK_RECIPE=bng` or
 `NOK_RECIPE=dia`; unrelated Make targets do not read this selector.
 
-The default `NOK_RECIPE_VERIFY_LEVEL=install` checks nok-controller readiness,
-recipe pods, Portal `/healthz`, and Prometheus readiness. Set
+`NOK_RECIPE_VERIFY_LEVEL` must be `install` or `full`; any other value is
+rejected.
+
+The default `NOK_RECIPE_VERIFY_LEVEL=install` checks nok-controller readiness;
+recipe pods (all containers Ready, not only `Running`); gNMIc Targets,
+NetworkDeviceTargets, recipe Flux Kustomizations (for example `bng-sdcio` when
+SDCIO is enabled), and Grafana operator CRs in the recipe namespace when those
+APIs are installed; Portal `/healthz`; and Prometheus readiness. Set
 `NOK_RECIPE_VERIFY_LEVEL=full` to add gNMIc subscription and Prometheus metric
 checks:
 

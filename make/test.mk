@@ -3,7 +3,7 @@
 #
 # Unit tests are fast and do not require a KinD cluster.
 # Integration / smoke tests require a deployed environment.
-# See docs/TESTING.md
+# See docs/TESTING.md and docs/TEST-CONTRIBUTION.md
 # ----------------------------------------------------------------------------
 
 TEST_DIR ?= $(BASE)/test

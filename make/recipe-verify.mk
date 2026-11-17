@@ -23,6 +23,8 @@ RECIPE_POD_WAIT_TIMEOUT ?= 5m
 
 RECIPE_NS = $(if $(filter bng,$(NOK_RECIPE)),nok-bng,$(if $(filter dia,$(NOK_RECIPE)),nok-dia,))
 RECIPE_LABEL = $(if $(filter bng,$(NOK_RECIPE)),BNG,$(if $(filter dia,$(NOK_RECIPE)),DIA,))
+FLUX_RECIPE_KUST_PREFIX = $(if $(filter bng,$(NOK_RECIPE)),bng-,$(if $(filter dia,$(NOK_RECIPE)),$(FLUX_DIA_KUST_PREFIX),))
+RECIPE_MANIFESTS_DIR = $(if $(filter bng,$(NOK_RECIPE)),$(BNG_MANIFESTS_DIR),$(if $(filter dia,$(NOK_RECIPE)),$(DIA_MANIFESTS_DIR),))
 
 .PHONY: help-recipe-verify
 help-recipe-verify: ## List per-recipe verification targets
@@ -42,11 +44,19 @@ verify-recipe-name-check:
 		*) echo "Error: NOK_RECIPE must be bng or dia (got '$(NOK_RECIPE)')" >&2; exit 1 ;; \
 	esac
 
-verify-recipe: verify-recipe-name-check check-tools ## Verify recipe health (NOK_RECIPE=bng|dia, NOK_RECIPE_VERIFY_LEVEL=install|full)
+.PHONY: verify-recipe-level-check
+verify-recipe-level-check: ## Validate NOK_RECIPE_VERIFY_LEVEL (install or full)
+	@case "$(NOK_RECIPE_VERIFY_LEVEL)" in \
+		install|full) ;; \
+		*) echo "Error: NOK_RECIPE_VERIFY_LEVEL must be install or full (got '$(NOK_RECIPE_VERIFY_LEVEL)')" >&2; exit 1 ;; \
+	esac
+
+verify-recipe: verify-recipe-name-check verify-recipe-level-check check-tools ## Verify recipe health (NOK_RECIPE=bng|dia, NOK_RECIPE_VERIFY_LEVEL=install|full)
 	@test -n "$(RECIPE_NS)" || { echo "Error: NOK_RECIPE must be bng or dia (got '$(NOK_RECIPE)')" >&2; exit 1; }
 	@echo "--> RECIPE [$(RECIPE_LABEL)]: Starting $(NOK_RECIPE_VERIFY_LEVEL)-level verification in namespace '$(RECIPE_NS)'"
 	@$(MAKE) verify-recipe-controller
 	@$(MAKE) verify-recipe-pods NOK_RECIPE=$(NOK_RECIPE)
+	@$(MAKE) verify-recipe-resources NOK_RECIPE=$(NOK_RECIPE)
 	@$(MAKE) verify-recipe-portal-health NOK_RECIPE=$(NOK_RECIPE)
 	@$(MAKE) verify-recipe-prometheus-ready NOK_RECIPE=$(NOK_RECIPE)
 	@if [ "$(NOK_RECIPE_VERIFY_LEVEL)" = "full" ]; then \
@@ -57,7 +67,7 @@ verify-recipe: verify-recipe-name-check check-tools ## Verify recipe health (NOK
 	@echo "--> RECIPE [$(RECIPE_LABEL)]: All $(NOK_RECIPE_VERIFY_LEVEL)-level checks passed."
 
 .PHONY: verify-recipe-pods
-verify-recipe-pods: verify-recipe-name-check $(KUBECTL) ## Wait for recipe namespace pods to be Running/Completed
+verify-recipe-pods: verify-recipe-name-check $(KUBECTL) ## Wait for recipe namespace pods to be Ready (not only Running)
 	@echo "--> RECIPE [$(RECIPE_LABEL)]: Checking pod availability in '$(RECIPE_NS)'"
 	@if ! $(KUBECTL) get namespace $(RECIPE_NS) >/dev/null 2>&1; then \
 		 echo "[FAIL] Namespace '$(RECIPE_NS)' does not exist. Run install-$(NOK_RECIPE)-pkg first." >&2; \
@@ -69,14 +79,95 @@ verify-recipe-pods: verify-recipe-name-check $(KUBECTL) ## Wait for recipe names
 		$(KUBECTL) wait --for=condition=Available deployment --all -n $(RECIPE_NS) --timeout=$(RECIPE_POD_WAIT_TIMEOUT); \
 	fi
 	@BAD=$$($(KUBECTL) get pods -n $(RECIPE_NS) --no-headers 2>/dev/null \
-		| awk '$$3!="Running" && $$3!="Completed" && $$3!="Succeeded" {print $$1 " (" $$3 ")"}'); \
+		| awk ' \
+		{ \
+		  name=$$1; ready=$$2; phase=$$3; \
+		  if (phase == "Completed" || phase == "Succeeded") next; \
+		  n = split(ready, parts, "/"); \
+		  if (n != 2 || parts[1] != parts[2] || parts[1] == 0) \
+		    print name " (READY " ready ", " phase ")"; \
+		}'); \
 	if [ -n "$$BAD" ]; then \
-		echo "[FAIL] Pods not ready in $(RECIPE_NS):"; \
+		echo "[FAIL] Pods not Ready in $(RECIPE_NS):"; \
 		echo "$$BAD" | sed 's/^/    /'; \
 		exit 1; \
 	fi
 	@COUNT=$$($(KUBECTL) get pods -n $(RECIPE_NS) --no-headers 2>/dev/null | wc -l); \
-	echo "[PASS] $$COUNT pod(s) Running/Completed in $(RECIPE_NS)"
+	echo "[PASS] $$COUNT pod(s) Ready or completed in $(RECIPE_NS)"
+
+.PHONY: verify-recipe-resources
+verify-recipe-resources: verify-recipe-name-check $(KUBECTL) ## Check recipe CRs: gNMIc targets, NDT, Flux Kustomizations, Grafana operator objects
+	@echo "--> RECIPE [$(RECIPE_LABEL)]: Checking Kubernetes and Flux resources"
+	@if $(KUBECTL) api-resources --api-group=gnmic.dev 2>/dev/null | grep -q targets; then \
+		TGT_COUNT=$$($(KUBECTL) get targets.operator.gnmic.dev -n $(RECIPE_NS) --no-headers 2>/dev/null | wc -l); \
+		if [ "$$TGT_COUNT" -eq 0 ]; then \
+			echo "[FAIL] No gNMIc Target resources (targets.operator.gnmic.dev) in $(RECIPE_NS)" >&2; \
+			exit 1; \
+		fi; \
+		echo "[PASS] $$TGT_COUNT gNMIc Target(s) in $(RECIPE_NS)"; \
+	else \
+		echo "[WARN] gNMIc Target API not installed — skip targets check"; \
+	fi
+	@if $(KUBECTL) get crd networkdevicetargets.nok.dev >/dev/null 2>&1; then \
+		NDT_COUNT=$$($(KUBECTL) get networkdevicetargets.nok.dev -n $(RECIPE_NS) --no-headers 2>/dev/null | wc -l); \
+		if [ "$$NDT_COUNT" -eq 0 ]; then \
+			echo "[FAIL] No NetworkDeviceTarget resources in $(RECIPE_NS)" >&2; \
+			exit 1; \
+		fi; \
+		echo "[PASS] $$NDT_COUNT NetworkDeviceTarget(s) in $(RECIPE_NS)"; \
+	else \
+		echo "[WARN] NetworkDeviceTarget CRD not installed — skip NDT check"; \
+	fi
+	@if [ ! -d "$(RECIPE_MANIFESTS_DIR)" ]; then \
+		echo "[WARN] Recipe manifests dir '$(RECIPE_MANIFESTS_DIR)' missing — skip Flux Kustomization checks"; \
+	else \
+		for d in $(RECIPE_MANIFESTS_DIR)/*/; do \
+			[ -d "$$d" ] || continue; \
+			n=$$(basename "$$d"); \
+			[ "$$n" = ".git" ] && continue; \
+			skip=0; \
+			if [ "$(SDCIO_ENABLED_NORM)" = "NO" ]; then \
+				for s in $(SDCIO_FLUX_SKIP_DIRS); do \
+					if [ "$$n" = "$$s" ]; then skip=1; break; fi; \
+				done; \
+			fi; \
+			[ "$$skip" = "1" ] && continue; \
+			kname="$(FLUX_RECIPE_KUST_PREFIX)$$n"; \
+			if ! $(KUBECTL) get kustomization "$$kname" -n flux-system >/dev/null 2>&1; then \
+				echo "[FAIL] Flux Kustomization '$$kname' not found in flux-system" >&2; \
+				exit 1; \
+			fi; \
+			KREADY=$$($(KUBECTL) get kustomization "$$kname" -n flux-system \
+				-o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null); \
+			if [ "$$KREADY" != "True" ]; then \
+				echo "[FAIL] Flux Kustomization '$$kname' not Ready (status=$$KREADY)" >&2; \
+				exit 1; \
+			fi; \
+			echo "[PASS] Flux Kustomization '$$kname' Ready"; \
+		done; \
+	fi
+	@if ! $(KUBECTL) api-resources --api-group=grafana.integreatly.org 2>/dev/null | grep -q grafana; then \
+		echo "[WARN] Grafana operator API not installed — skip Grafana CR checks"; \
+	else \
+		G_COUNT=$$($(KUBECTL) get grafana.grafana.integreatly.org -n $(RECIPE_NS) --no-headers 2>/dev/null | wc -l); \
+		if [ "$$G_COUNT" -eq 0 ]; then \
+			echo "[FAIL] No Grafana CR (grafana.integreatly.org) in $(RECIPE_NS)" >&2; \
+			exit 1; \
+		fi; \
+		echo "[PASS] $$G_COUNT Grafana CR(s) in $(RECIPE_NS)"; \
+		DS_COUNT=$$($(KUBECTL) get grafanadatasources.grafana.integreatly.org -n $(RECIPE_NS) --no-headers 2>/dev/null | wc -l); \
+		if [ "$$DS_COUNT" -eq 0 ]; then \
+			echo "[FAIL] No GrafanaDatasource CRs in $(RECIPE_NS)" >&2; \
+			exit 1; \
+		fi; \
+		echo "[PASS] $$DS_COUNT GrafanaDatasource(s) in $(RECIPE_NS)"; \
+		DB_COUNT=$$($(KUBECTL) get grafanadashboards.grafana.integreatly.org -n $(RECIPE_NS) --no-headers 2>/dev/null | wc -l); \
+		if [ "$$DB_COUNT" -eq 0 ]; then \
+			echo "[FAIL] No GrafanaDashboard CRs in $(RECIPE_NS)" >&2; \
+			exit 1; \
+		fi; \
+		echo "[PASS] $$DB_COUNT GrafanaDashboard(s) in $(RECIPE_NS)"; \
+	fi
 
 .PHONY: verify-recipe-portal-health
 verify-recipe-portal-health: verify-recipe-name-check $(KUBECTL) ## HTTP GET /healthz on the recipe portal ingress
