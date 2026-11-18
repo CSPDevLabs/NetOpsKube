@@ -8,7 +8,7 @@ Each requirement is linked to one or more BATS unit tests with a
 - `CLONE-01`: Repository clone targets preserve existing checkouts.
 - `DIAG-01`: `os-shell` and `proxy-env` print their settings as JSON.
 - `DIA-01`: DIA Flux Kustomizations use the configured `FLUX_DIA_KUST_PREFIX`.
-- `GNMIC-01`: gNMI subscription verification warns and succeeds when no targets exist.
+- `GNMIC-01`: gNMI subscription verification warns and succeeds when no targets exist, and fails when any reported subscription is not running.
 - `GITEA-01`: The Gitea manifest patch sets the pullable image and is idempotent.
 - `HELP-01`: Make help targets list the relevant targets and help exits successfully.
 - `KIND-01`: The tracked KinD configuration uses the expected subnets and IPv4 networking.
@@ -18,6 +18,6 @@ Each requirement is linked to one or more BATS unit tests with a
 - `LB-03`: `show-kind-lb-setters` prints the detected prefix and setter values.
 - `NET-01`: Gitea addresses derive from the KinD prefix and configured host octets.
 - `RCP-01`: Recipe verification rejects unknown recipes without blocking unrelated Make targets.
-- `RCP-02`: Recipe health checks fail when recipe pods are not Ready or required install CRs are missing.
+- `RCP-02`: Recipe health checks require non-empty pod and resource lists, reject unhealthy or deleting pods and query errors, and require enabled Flux Kustomizations to be Ready.
 - `TEST-01`: The kpt validator and requirement check fail when their required inputs are missing.
 - `TOOL-01`: `check-tools` provisions the pinned Bats version.

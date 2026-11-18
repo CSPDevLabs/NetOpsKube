@@ -43,6 +43,27 @@ load '../../helpers/common.bash'
 }
 
 # bats test_tags=req:RCP-01
+@test "full verification stops when subscription verification fails" {
+  local fixture="${BATS_TEST_TMPDIR}/Makefile"
+  cat > "$fixture" <<EOF
+include ${NETOPSKUBE_ROOT}/make/recipe-verify.mk
+check-tools:
+verify-recipe-controller verify-recipe-pods verify-recipe-resources verify-recipe-portal-health verify-recipe-prometheus-ready:
+	@:
+verify-recipe-gnmic-subscriptions:
+	@echo SUBSCRIPTION_CHECK_FAILED; exit 1
+verify-recipe-metrics:
+	@echo METRICS_CHECK_RAN
+EOF
+  run make -f "$fixture" verify-recipe NOK_RECIPE=bng NOK_RECIPE_VERIFY_LEVEL=full \
+    KUBECTL=/bin/true MAKE="make -f $fixture"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"SUBSCRIPTION_CHECK_FAILED"* ]]
+  [[ "$output" != *"METRICS_CHECK_RAN"* ]]
+  [[ "$output" != *"All full-level checks passed"* ]]
+}
+
+# bats test_tags=req:RCP-01
 @test "unrelated Make targets ignore the legacy RECIPE variable" {
   run env RECIPE=banana make -C "$NETOPSKUBE_ROOT" help
   [ "$status" -eq 0 ]

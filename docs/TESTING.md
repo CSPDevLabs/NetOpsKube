@@ -57,12 +57,28 @@ For direct verification, select a recipe with `NOK_RECIPE=bng` or
 rejected.
 
 The default `NOK_RECIPE_VERIFY_LEVEL=install` checks nok-controller readiness;
-recipe pods (all containers Ready, not only `Running`); gNMIc Targets,
-NetworkDeviceTargets, recipe Flux Kustomizations (for example `bng-sdcio` when
-SDCIO is enabled), and Grafana operator CRs in the recipe namespace when those
-APIs are installed; Portal `/healthz`; and Prometheus readiness. Set
+recipe pods; gNMIc Targets, NetworkDeviceTargets, recipe Flux Kustomizations
+(for example `bng-sdcio` when SDCIO is enabled), and Grafana operator CRs in the
+recipe namespace; Portal `/healthz`; and Prometheus readiness.
+
+Pod checks require a non-empty pod list. Each pod must be `Running` with its
+`Ready` condition set to `True`, or have completed successfully (`Succeeded`).
+Pods being deleted are rejected even if they still report Ready. Failed pod
+or deployment queries fail verification rather than being treated as an empty
+list.
+
+Resource checks require gNMIc Targets (`targets.operator.gnmic.dev`),
+NetworkDeviceTargets, Grafanas, GrafanaDatasources, and GrafanaDashboards.
+Missing APIs, denied queries, and empty resource lists fail verification.
+The recipe manifests directory must exist and contain enabled manifest
+subdirectories; each corresponding Flux Kustomization must be readable and
+Ready. Only the `sdcio` and `schemas` Flux checks are omitted when
+`SDCIO_ENABLED=NO`, matching deployment behavior.
+
+Set
 `NOK_RECIPE_VERIFY_LEVEL=full` to add gNMIc subscription and Prometheus metric
-checks:
+checks. A non-running subscription fails verification immediately; successful
+metric checks cannot override that failure:
 
 ```bash
 NOK_RECIPE_VERIFY_LEVEL=full make verify-recipe-bng
