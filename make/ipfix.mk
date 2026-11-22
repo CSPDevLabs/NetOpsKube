@@ -23,7 +23,7 @@
 IPFIX_ENABLED ?= NO
 
 IPFIX_REPO_URL ?= https://github.com/CSPDevLabs/ipfix-consumer.git
-IPFIX_DIR ?= $(BASE)/nok-ipfix
+IPFIX_DIR ?= $(BASE)/nok-kpt/nok-ipfix
 IPFIX_NAMESPACE ?= nok-ipfix
 
 IPFIX_CONFIG_FILE ?= $(IPFIX_DIR)/clusters.conf
@@ -32,7 +32,7 @@ IPFIX_GENERATOR_SCRIPT ?= $(IPFIX_DIR)/scripts/generate-ipfix-manifests.sh
 IPFIX_KAFKA_READY_TIMEOUT ?= 180s
 IPFIX_POSTGRES_READY_TIMEOUT ?= 180s
 IPFIX_JOB_TIMEOUT ?= 180s
-IPFIX_DEPLOYMENT_TIMEOUT ?= 180s
+IPFIX_DEPLOYMENT_TIMEOUT ?= 300s
 
 # Shared resource names
 
@@ -58,49 +58,12 @@ IPFIX_GENERATED_GOFLOW_SERVICES ?= $(IPFIX_DIR)/goflow/service-*.yaml
 IPFIX_GENERATED_KAFKA_TOPICS ?= $(IPFIX_DIR)/kafka/topic-ipfix-*.yaml
 
 # ------------------------------------------------------------------------------
-# Clone IPFIX Consumer Repository
-# ------------------------------------------------------------------------------
-
-.PHONY: ensure-ipfix-repository
-
-ensure-ipfix-repository: ## Clone IPFIX consumer repository if missing
-	@set -eu; \
-	echo ""; \
-	echo "--> IPFIX: Checking repository"; \
-	if [ -d "$(IPFIX_DIR)/.git" ] || [ -f "$(IPFIX_DIR)/.git" ]; then \
-		if ! command -v git >/dev/null 2>&1; then \
-			echo "[ERROR] Git is required to validate the IPFIX repository." >&2; \
-			exit 1; \
-		fi; \
-		repo_root=$$(git -C "$(IPFIX_DIR)" rev-parse --show-toplevel 2>/dev/null || true); \
-		expected_dir=$$(cd "$(IPFIX_DIR)" && pwd -P); \
-		if [ "$$repo_root" != "$$expected_dir" ]; then \
-			echo "[ERROR] Invalid Git repository: $(IPFIX_DIR)" >&2; \
-			exit 1; \
-		fi; \
-		echo "--> IPFIX: Repository already exists"; \
-	elif [ -d "$(IPFIX_DIR)" ] && [ -n "$$(ls -A "$(IPFIX_DIR)")" ]; then \
-		echo "[ERROR] Directory exists but is not an IPFIX Git repository: $(IPFIX_DIR)" >&2; \
-		exit 1; \
-	else \
-		if ! command -v git >/dev/null 2>&1; then \
-			echo "[ERROR] Git is required to clone the IPFIX repository." >&2; \
-			exit 1; \
-		fi; \
-		echo "--> IPFIX: Cloning $(IPFIX_REPO_URL)"; \
-		mkdir -p "$(BASE)"; \
-		git clone "$(IPFIX_REPO_URL)" "$(IPFIX_DIR)"; \
-		echo "--> IPFIX: Repository cloned successfully"; \
-	fi; \
-	echo ""
-
-# ------------------------------------------------------------------------------
 # Generate IPFIX Manifests
 # ------------------------------------------------------------------------------
 
 .PHONY: generate-ipfix-manifests
 
-generate-ipfix-manifests: ensure-ipfix-repository ## Generate GoFlow2 and Kafka manifests from clusters.conf
+generate-ipfix-manifests: ## Generate GoFlow2 and Kafka manifests from clusters.conf
 	@set -eu; \
 	echo ""; \
 	echo "============================================================"; \
@@ -215,7 +178,6 @@ deploy-ipfix: ## Deploy one explicitly requested IPFIX cluster
 		exit 1; \
 	fi; \
 	echo "--> IPFIX: Requested cluster: $$cluster_id"; \
-	$(MAKE) ensure-ipfix-repository; \
 	if [ ! -f "$(IPFIX_CONFIG_FILE)" ] || [ ! -r "$(IPFIX_CONFIG_FILE)" ]; then \
 		echo "[ERROR] Configuration file missing or unreadable: $(IPFIX_CONFIG_FILE)" >&2; \
 		exit 1; \

@@ -24,7 +24,7 @@ BNG_REPO_URL = ssh://git@$(GITEA_SSH_HOST)/$(GITEA_ADMIN_USER)/$(FLUX_BNG_REPO).
 # IPFIX BNG Integration Paths
 # ------------------------------------------------------------------------------
 
-BNG_IPFIX_DIR ?= $(BASE)/nok-kpt/nok-ipfix/nok-bng
+BNG_IPFIX_DIR ?= $(BASE)/nok-clabs/nok-ipfix/nok-bng
 BNG_IPFIX_GRAFANA_DATASOURCE_MANIFEST ?= $(BNG_IPFIX_DIR)/grafana/datasource/ipfix-postgres-ds.yaml
 BNG_IPFIX_GRAFANA_DASHBOARD_JSON ?= $(BNG_IPFIX_DIR)/grafana/manifests/ipfix-flow-analytics.json
 BNG_IPFIX_GRAFANA_DASHBOARD_MANIFEST ?= $(BNG_IPFIX_DIR)/grafana/manifests/ipfix-flow-analytics.yaml
