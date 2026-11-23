@@ -10,7 +10,7 @@ BNG_NAMESPACE ?= nok-bng
 
 .PHONY: help-troubleshoot
 help-troubleshoot: ## List troubleshooting targets only
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(lastword $(MAKEFILE_LIST)) | sort \
+	@grep -E '^[a-zA-Z0-9_.-]+:.*?## .*$$' make/troubleshoot.mk | sort \
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 
 .PHONY: verify-gnmic-subscriptions
@@ -43,7 +43,7 @@ verify-gnmic-subscriptions: $(KUBECTL) ## Show gNMIc Target subscription status 
 				printf "%-30s %-20s %-12s %-45s \033[0;31m%s\033[0m\n" "$$tgt" "$$cluster" "$$conn" "$$sub" "$$state"; \
 			fi; \
 		done; \
-		if echo "$$ROWS" | awk -F'\t' '$$5!="running"{exit 0} END{exit 1}'; then BAD=1; fi; \
+		if echo "$$ROWS" | awk -F'\t' '$$5!="running"{bad=1} END{exit !bad}'; then BAD=1; fi; \
 	done; \
 	if [ $$BAD -ne 0 ]; then \
 		echo ""; \
